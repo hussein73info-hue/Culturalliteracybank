@@ -1,0 +1,8 @@
+{
+  "name": "Remix newqusetionbank",
+  "description": "Imported from GitHub: hussein73info-hue/newqusetionbank",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

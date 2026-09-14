@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "QuestionOverride": {
+      "title": "QuestionOverride",
+      "description": "Overrides to default question contents made by administrator",
+      "type": "object",
+      "properties": {
+        "questionId": { "type": "number", "description": "Unique identifier of the question" },
+        "text": { "type": "string", "description": "Modified question text" },
+        "options": { "type": "array", "description": "Multiple choice options" },
+        "answer": { "type": "number", "description": "Index of the correct answer" },
+        "lesson": { "type": "string", "description": "Associated lesson" },
+        "hint": { "type": "string", "description": "Educational hint or explanation" },
+        "hintDeleted": { "type": "boolean", "description": "Whether hint was explicitly deleted" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp of modification" }
+      },
+      "required": ["questionId", "text", "options", "answer"]
+    },
+    "QuestionAddition": {
+      "title": "QuestionAddition",
+      "description": "New questions added by administrator",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Unique question identifier" },
+        "sem": { "type": "number", "description": "Semester number" },
+        "unit": { "type": "number", "description": "Unit number" },
+        "unitName": { "type": "string", "description": "Unit title" },
+        "lesson": { "type": "string", "description": "Lesson title" },
+        "hint": { "type": "string", "description": "Educational hint" },
+        "text": { "type": "string", "description": "Question text" },
+        "options": { "type": "array", "description": "Multiple choice options" },
+        "answer": { "type": "number", "description": "Index of the correct answer" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "text", "options", "answer"]
+    },
+    "QuestionDeletion": {
+      "title": "QuestionDeletion",
+      "description": "Record of deleted questions",
+      "type": "object",
+      "properties": {
+        "questionId": { "type": "number", "description": "Question ID that has been deleted" },
+        "deletedAt": { "type": "string", "format": "date-time", "description": "Deletion timestamp" }
+      },
+      "required": ["questionId"]
+    },
+    "StudentRegistration": {
+      "title": "StudentRegistration",
+      "description": "Student registration information",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Student email address" },
+        "name": { "type": "string", "description": "Student full name" },
+        "school": { "type": "string", "description": "Student school or directorate" },
+        "lastActiveAt": { "type": "string", "format": "date-time", "description": "Last active timestamp" }
+      },
+      "required": ["email", "name"]
+    },
+    "StudentAttempt": {
+      "title": "StudentAttempt",
+      "description": "Student quiz attempt records",
+      "type": "object",
+      "properties": {
+        "attemptId": { "type": "string", "description": "Unique attempt identifier" },
+        "studentEmail": { "type": "string", "description": "Student email" },
+        "studentName": { "type": "string", "description": "Student name" },
+        "school": { "type": "string", "description": "School name" },
+        "quizTitle": { "type": "string", "description": "Quiz title or scope" },
+        "mode": { "type": "string", "description": "Quiz mode (train or exam)" },
+        "score": { "type": "number", "description": "Score obtained" },
+        "total": { "type": "number", "description": "Total question count" },
+        "percentage": { "type": "number", "description": "Percentage score" },
+        "timeSpent": { "type": "string", "description": "Duration spent on quiz" },
+        "submittedAt": { "type": "string", "format": "date-time", "description": "Submission timestamp" }
+      },
+      "required": ["attemptId", "studentEmail", "studentName", "quizTitle", "score"]
+    },
+    "CurriculumBook": {
+      "title": "CurriculumBook",
+      "description": "Curriculum textbook and digital reader pages structure stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of book (e.g., book_sem1 or book_sem2)" },
+        "sem": { "type": "number", "description": "Semester number (1 or 2)" },
+        "title": { "type": "string", "description": "Full book title" },
+        "edition": { "type": "string", "description": "Textbook edition" },
+        "publisher": { "type": "string", "description": "Publishing entity" },
+        "totalPages": { "type": "number", "description": "Total number of pages" },
+        "pdfUrl": { "type": "string", "description": "URL to official digital textbook" },
+        "directPdf": { "type": "string", "description": "Direct link to book PDF" },
+        "units": { "type": "array", "description": "List of textbook units and lessons" },
+        "pages": { "type": "array", "description": "Detailed digital book pages with text and illustrations" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last updated timestamp" }
+      },
+      "required": ["id", "sem", "title", "units"]
+    },
+    "AqyemQuestion": {
+      "title": "AqyemQuestion",
+      "description": "Curriculum Aqyem Ta'allumi questions, answers, exercises, and journal entries stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Unique identifier of Aqyem question" },
+        "qNum": { "type": "number", "description": "Question sequence number" },
+        "sem": { "type": "number", "description": "Semester number (1 or 2)" },
+        "unitId": { "type": "number", "description": "Unit ID" },
+        "unitName": { "type": "string", "description": "Unit name" },
+        "lesson": { "type": "string", "description": "Associated lesson title" },
+        "type": { "type": "string", "description": "Question type (mcq, fill, essay, financial)" },
+        "typeLabel": { "type": "string", "description": "Display label for question type" },
+        "text": { "type": "string", "description": "Full question text" },
+        "context": { "type": "string", "description": "Problem context, ledger data or financial conditions" },
+        "options": { "type": "array", "description": "List of options for multiple-choice questions" },
+        "correct": { "type": "number", "description": "Index of the correct option for MCQ" },
+        "answer": { "type": "string", "description": "Official model answer, accounting entry or solution" },
+        "explanation": { "type": "string", "description": "Educational explanation and textbook reference" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last modified timestamp" }
+      },
+      "required": ["id", "sem", "unitId", "lesson", "type", "text"]
+    }
+  },
+  "firestore": {
+    "/question_overrides/{questionId}": {
+      "schema": "QuestionOverride",
+      "description": "Collection of question overrides"
+    },
+    "/question_additions/{questionId}": {
+      "schema": "QuestionAddition",
+      "description": "Collection of newly added questions"
+    },
+    "/question_deletions/{questionId}": {
+      "schema": "QuestionDeletion",
+      "description": "Collection of deleted question IDs"
+    },
+    "/student_registrations/{email}": {
+      "schema": "StudentRegistration",
+      "description": "Registered students database"
+    },
+    "/student_attempts/{attemptId}": {
+      "schema": "StudentAttempt",
+      "description": "Recorded student quiz attempts"
+    },
+    "/curriculum_books/{bookId}": {
+      "schema": "CurriculumBook",
+      "description": "Curriculum textbooks and digital pages"
+    },
+    "/aqyem_questions/{questionId}": {
+      "schema": "AqyemQuestion",
+      "description": "Collection of curriculum Aqyem questions and journal entries"
+    }
+  }
+}

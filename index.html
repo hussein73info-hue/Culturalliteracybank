@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#1a3a5c">
+  <title>بنك أسئلة الثقافة المالية</title>
+  <meta name="description" content="منصة بنك أسئلة مادة الثقافة المالية للصف الثاني عشر المسار الأكاديمي مع دعم القيود المحاسبية متعددة الأسطر">
+  <meta property="og:title" content="بنك أسئلة الثقافة المالية">
+  <meta property="og:description" content="منصة بنك أسئلة مادة الثقافة المالية للصف الثاني عشر المسار الأكاديمي مع دعم القيود المحاسبية متعددة الأسطر">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header style="cursor:pointer;" onclick="goHome()" title="العودة إلى الصفحة الرئيسية">
+    <div class="hdr-icon">📚</div>
+    <h1>الثقافة المالية</h1>
+    <p>إعداد المشرف التربوي: <strong id="admin-secret-trigger" onclick="event.stopPropagation();onAdminSecretClick()" style="cursor:default" title="إعداد المشرف التربوي">حسين علقم</strong></p>
+    <div class="hdr-contact-wrap">
+      <a href="mailto:alkam14@gmail.com?subject=%D8%A8%D9%86%D9%83%20%D8%A3%D8%B3%D8%A6%D9%84%D8%A9%20%D8%A7%D9%84%D8%AB%D9%82%D8%A7%D9%81%D8%A9%20%D8%A7%D9%84%D9%85%D8%A7%D9%84%D9%8A%D8%A9%20-%20%D8%AA%D9%88%D8%A7%D8%B5%D9%84" class="hdr-contact-btn" id="btn-header-contact" onclick="event.stopPropagation();" title="الاتصال بنا عبر البريد الإلكتروني (alkam14@gmail.com)">
+        <i class="fas fa-envelope"></i> <span>الاتصال بنا</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- NAVBAR (hidden on start) -->
+  <div id="navbar" style="display:none">
+    <button id="btn-home" class="nb-home" onclick="goHome()" title="الصفحة الرئيسية" aria-label="الصفحة الرئيسية">
+      <i class="fas fa-home"></i> <span>الرئيسية</span>
+    </button>
+    <button id="btn-back" onclick="goBack()" style="display:none">
+      <i class="fas fa-arrow-right"></i> <span>رجوع</span>
+    </button>
+    <span id="nav-title" class="nb-title"></span>
+    <span class="nb-space"></span>
+    <button id="qnav-btn" class="nb-qnav" onclick="toggleQNav()" style="display:none">
+      <i class="fas fa-th"></i> خريطة
+    </button>
+    <button id="btn-teacher-students" class="nb-students" onclick="openTeacherStudentsModal()" title="سجل الطلاب والنتائج" style="display:none">
+      <i class="fas fa-users"></i> <span>سجل الطلاب</span>
+    </button>
+    <button id="btn-editor" class="nb-editor" onclick="toggleEditorMode()" title="لوحة تحكم المعلم (تتطلب كلمة مرور)">
+      <i class="fas fa-lock"></i> <span id="btn-editor-text">وضع المحرر</span>
+    </button>
+  </div>
+
+  <!-- PAGE: START -->
+  <div id="pg-start" class="pg">
+    <div class="welcome">
+      <div class="w-icon">🎓</div>
+      <div class="w-title">مرحبا بك في بنك اسئلة مادة الثقافة المالية للصف الثاني عشر المسار الاكاديمي</div>
+      <p style="font-size:14.5px;color:#475569;max-width:580px;margin:10px auto 18px;line-height:1.65;font-weight:600;">
+        المنصة التفاعلية المعتمدة لتدريب طلبة التوجيهي وفق أحدث طبعة من المنهاج المدرسي والامتحانات الوزارية المقترحة والشاملة.
+      </p>
+    </div>
+    <button class="btn-enter" onclick="startApp()">الدخول إلى بنك الأسئلة ←</button>
+
+    <!-- بوابة دخول المعلم / وضع المحرر المشفر بالباسورد -->
+    <div style="text-align:center;margin-top:16px;">
+      <button type="button" class="btn-teacher-gateway" onclick="toggleEditorMode()" title="لوحة تحكم المعلم والمصمم (تتطلب كلمة مرور)">
+        <i class="fas fa-user-shield"></i> لوحة تحكم المعلم / وضع المحرر
+      </button>
+    </div>
+  </div>
+
+  <!-- PAGE: HOME -->
+  <div id="pg-home" class="pg" style="display:none">
+    <div id="home-inner"></div>
+  </div>
+
+  <!-- PAGE: LESSONS -->
+  <div id="pg-lessons" class="pg" style="display:none">
+    <div id="lessons-inner"></div>
+  </div>
+
+  <!-- PAGE: UNITS -->
+  <div id="pg-units" class="pg" style="display:none">
+    <div id="units-inner"></div>
+  </div>
+
+  <!-- PAGE: MINISTERIAL -->
+  <div id="pg-ministerial" class="pg" style="display:none">
+    <div id="ministerial-inner"></div>
+  </div>
+
+  <!-- PAGE: EXAMS -->
+  <div id="pg-exams" class="pg" style="display:none">
+    <div id="exams-inner"></div>
+  </div>
+
+  <!-- PAGE: AQYEM (اختيار الفصل) -->
+  <div id="pg-aqyem" class="pg" style="display:none">
+    <div id="aqyem-inner"></div>
+  </div>
+
+  <!-- PAGE: AQYEM SEMESTER 1 (فهرس دروس وأسئلة الفصل الأول) -->
+  <div id="pg-aqyem-sem1" class="pg" style="display:none">
+    <div id="aqyem-sem1-inner"></div>
+  </div>
+
+  <!-- PAGE: AQYEM SEMESTER 2 (فهرس دروس وأسئلة الفصل الثاني) -->
+  <div id="pg-aqyem-sem2" class="pg" style="display:none">
+    <div id="aqyem-sem2-inner"></div>
+  </div>
+
+  <!-- PAGE: AQYEM QUESTIONS (صفحة عرض أسئلة أقيم تعلمي مع زر الرجوع) -->
+  <div id="pg-aqyem-questions" class="pg" style="display:none">
+    <div id="aqyem-questions-inner"></div>
+  </div>
+
+  <!-- PAGE: QUIZ -->
+  <div id="pg-quiz" class="pg" style="display:none">
+    <div id="quiz-inner"></div>
+  </div>
+
+  <!-- PAGE: RESULT -->
+  <div id="pg-result" class="pg" style="display:none">
+    <div id="result-inner"></div>
+  </div>
+
+</div>
+
+<!-- QUESTION NAVIGATION OVERLAY -->
+<div id="qnav-overlay" class="qnav-overlay">
+  <div class="qnav-panel">
+    <div class="qnav-head">
+      <span class="qnav-title">خريطة الأسئلة</span>
+      <button class="qnav-close" onclick="toggleQNav()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="qnav-legend">
+      <span class="lg lg-c"></span> صحيحة
+      <span class="lg lg-w"></span> خاطئة
+      <span class="lg lg-s"></span> لم تُجب
+    </div>
+    <div id="qnav-grid" class="qnav-grid"></div>
+  </div>
+</div>
+
+<!-- EDITOR: PASSWORD MODAL -->
+<div id="editor-pwd-overlay" class="editor-overlay">
+  <div class="editor-modal editor-pwd-modal">
+    <div class="editor-modal-head">
+      <span class="editor-modal-title"><i class="fas fa-user-shield"></i> لوحة تحكم المعلم / وضع المحرر</span>
+      <button class="editor-modal-close" onclick="closeEditorPwd()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="editor-modal-body">
+      <div style="background:#e8f4fc;border:1px solid #b9d5ee;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#1b4f72;line-height:1.5;">
+        <i class="fas fa-info-circle" style="color:#2980b9;margin-left:4px;"></i>
+        <strong>دخول المعلم:</strong> أدخل كلمة المرور للدخول المباشر إلى لوحة التحكم وإدارة بنك الأسئلة (لا يلزم تسجيل حساب Google).
+      </div>
+      <input type="password" id="editor-pwd-input" class="editor-input" placeholder="أدخل كلمة المرور" autocomplete="off" onkeydown="if(event.key==='Enter')submitEditorPwd()">
+      <p id="editor-pwd-err" class="editor-err" style="display:none">كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى</p>
+      <button class="editor-btn-primary" onclick="submitEditorPwd()">🔐 الدخول إلى لوحة التحكم</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDITOR: QUESTION EDIT MODAL -->
+<div id="editor-edit-overlay" class="editor-overlay">
+  <div class="editor-modal editor-edit-modal">
+    <div class="editor-modal-head">
+      <span class="editor-modal-title"><i class="fas fa-edit"></i> تحرير السؤال</span>
+      <button class="editor-modal-close" onclick="closeEditorEdit()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="editor-modal-body" id="editor-edit-body">
+      <!-- يتم ملؤها ديناميكياً من script.js -->
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRM QUESTION DELETE -->
+<div id="delete-confirm-overlay" class="editor-overlay" onclick="closeDeleteConfirmModal(event)">
+  <div class="editor-modal" style="max-width:480px;border:2px solid #e74c3c;" onclick="event.stopPropagation()">
+    <div class="editor-modal-head" style="background:linear-gradient(135deg,#c0392b,#e74c3c);">
+      <span class="editor-modal-title"><i class="fas fa-exclamation-triangle"></i> تأكيد حذف السؤال نهائياً</span>
+      <button class="editor-modal-close" onclick="closeDeleteConfirmModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="editor-modal-body" style="padding:18px;">
+      <div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">
+        <i class="fas fa-trash-alt" style="color:#e74c3c;font-size:22px;margin-top:2px;"></i>
+        <div>
+          <div style="font-weight:800;color:#9b2c2c;font-size:14px;margin-bottom:4px;">تنبيه حذف نهائي من البرنامج و Firebase</div>
+          <div style="font-size:12px;color:#742a2a;line-height:1.5;">
+            هل أنت متأكد من رغبتك في حذف هذا السؤال؟ سيتم إزالته فوراً من <strong>البرنامج</strong> وحذفه نهائياً من <strong>قاعدة بيانات Firebase السحابية</strong> ولن يظهر للطلبة.
+          </div>
+        </div>
+      </div>
+
+      <div id="delete-confirm-question-info" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:16px;">
+        <!-- يتم ملء تفاصيل السؤال ديناميكياً -->
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button id="btn-confirm-delete-action" class="ed-btn ed-btn-delete" style="flex:1;min-width:180px;padding:11px;font-size:13px;font-weight:800;background:#e74c3c;color:#fff;border:none;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;" onclick="executeDeleteQuestionAction()">
+          <i class="fas fa-trash-alt"></i> نعم، حذف من البرنامج و Firebase
+        </button>
+        <button class="ed-btn ed-btn-cancel" style="padding:11px 18px;font-size:13px;border-radius:9px;" onclick="closeDeleteConfirmModal()">إلغاء وتراجع</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DELETE SUCCESS CONFIRMATION -->
+<div id="delete-success-overlay" class="editor-overlay" onclick="closeDeleteSuccessModal(event)">
+  <div class="editor-modal" style="max-width:460px;text-align:center;" onclick="event.stopPropagation()">
+    <div class="editor-modal-head" style="background:linear-gradient(135deg,#27ae60,#2ecc71);">
+      <span class="editor-modal-title" style="margin:0 auto;"><i class="fas fa-check-circle"></i> تم تأكيد الحذف بنجاح</span>
+      <button class="editor-modal-close" onclick="closeDeleteSuccessModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="editor-modal-body" style="padding:22px 18px;">
+      <div style="width:60px;height:60px;background:#e8f8f0;color:#27ae60;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 14px;">
+        <i class="fas fa-check"></i>
+      </div>
+      <h3 style="font-size:16px;color:#1e3a5f;margin-bottom:8px;font-weight:800;">تم الحذف من البرنامج و Firebase بنجاح</h3>
+      <p id="delete-success-message" style="font-size:13px;color:#4a5568;line-height:1.6;margin-bottom:18px;">
+        تم حذف السؤال نهائياً من البرنامج ولن يظهر للطلبة بعد الآن، وتم تسجيل وتأكيد حذفه في قاعدة بيانات Firebase السحابية.
+      </p>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;font-size:12px;color:#166534;margin-bottom:18px;display:flex;align-items:center;justify-content:center;gap:6px;">
+        <i class="fas fa-cloud-check"></i> <strong>حالة المزامنة:</strong> تم التحديث الفوري في Firebase Firestore
+      </div>
+      <button class="editor-btn-primary" style="margin:0;background:linear-gradient(135deg,#27ae60,#2ecc71);" onclick="closeDeleteSuccessModal()">
+        حسناً، فهمت
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: QUIZ MODE SELECTOR (النمط التدريبي أو النمط الامتحاني مع شروحات مفصلة) -->
+<div id="quiz-mode-select-overlay" class="editor-overlay" onclick="closeQuizModeModal(event)">
+  <div class="editor-modal quiz-mode-modal" style="max-width:680px;" onclick="event.stopPropagation()">
+    <div class="editor-modal-head" style="background:linear-gradient(135deg,#1a3a5c,#2b4c7e);">
+      <span class="editor-modal-title">
+        <i class="fas fa-sliders-h"></i> اختيار نمط الاختبار قبل البدء
+      </span>
+      <button type="button" class="editor-modal-close" onclick="closeQuizModeModal()"><i class="fas fa-times"></i></button>
+    </div>
+    
+    <div class="editor-modal-body" style="padding:20px 18px;">
+      <!-- Quiz Meta Info -->
+      <div id="qmode-quiz-info-bar" style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:42px;height:42px;border-radius:10px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+            <i class="fas fa-file-signature"></i>
+          </div>
+          <div>
+            <div id="qmode-quiz-title" style="font-weight:800;color:#0f172a;font-size:15px;line-height:1.4;">عنوان الاختبار</div>
+            <div id="qmode-quiz-count" style="font-size:12.5px;color:#64748b;margin-top:2px;">عدد الأسئلة: -- سؤالاً</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#0369a1;background:#e0f2fe;padding:5px 12px;border-radius:20px;font-weight:700;">
+          <i class="fas fa-hand-pointer"></i> حدد النمط للبدء فوراً
+        </div>
+      </div>
+
+      <div style="font-size:13.5px;color:#334155;margin-bottom:14px;font-weight:700;">
+        حدد نمط التدريب أو الامتحان المناسب لك قبل بدء الجلسة:
+      </div>
+
+      <!-- Mode Cards Grid -->
+      <div class="quiz-mode-cards-grid">
+        <!-- Training Mode Card -->
+        <div class="quiz-mode-card qmc-train" onclick="selectQuizModeAndProceed('train')">
+          <div class="qmc-header">
+            <div class="qmc-icon-wrap train-icon">
+              <i class="fas fa-book-reader"></i>
+            </div>
+            <div class="qmc-title-box">
+              <span class="qmc-badge badge-train"><i class="fas fa-graduation-cap"></i> للتعلّم والمراجعة</span>
+              <h4 class="qmc-title">النمط التدريبي</h4>
+            </div>
+          </div>
+          
+          <div class="qmc-features">
+            <div class="qmc-feature-item">
+              <i class="fas fa-check-circle" style="color:#10b981;"></i>
+              <span><strong>تصحيح فوري ومباشر:</strong> تظهر لك صحة كل إجابة فور اختيارها (أخضر / أحمر).</span>
+            </div>
+            <div class="qmc-feature-item">
+              <i class="fas fa-book-open" style="color:#0284c7;"></i>
+              <span><strong>شروحات وسند الكتاب:</strong> عرض الشرح التفسيري والسند العلمي ورقم الصفحة من كتاب الطالب.</span>
+            </div>
+            <div class="qmc-feature-item">
+              <i class="fas fa-lightbulb" style="color:#f59e0b;"></i>
+              <span><strong>تلميحات مساعدة:</strong> إمكانية فتح تلميح السؤال الذكي للمساعدة في الاستذكار.</span>
+            </div>
+            <div class="qmc-feature-item">
+              <i class="fas fa-hourglass-half" style="color:#6366f1;"></i>
+              <span><strong>بدون ضغط وقت:</strong> تدرب براحتك وتأنّ في التفكير دون وجود مؤقت تنازلي.</span>
+            </div>
+          </div>
+
+          <button type="button" class="qmc-start-btn btn-start-train">
+            <i class="fas fa-play"></i> <span>ابدأ بالنمط التدريبي</span>
+          </button>
+        </div>
+
+        <!-- Exam Mode Card -->
+        <div class="quiz-mode-card qmc-exam" onclick="selectQuizModeAndProceed('exam')">
+          <div class="qmc-header">
+            <div class="qmc-icon-wrap exam-icon">
+              <i class="fas fa-stopwatch"></i>
+            </div>
+            <div class="qmc-title-box">
+              <span class="qmc-badge badge-exam"><i class="fas fa-award"></i> محاكاة الامتحان الوزاري</span>
+              <h4 class="qmc-title">النمط الامتحاني</h4>
+            </div>
+          </div>
+          
+          <div class="qmc-features">
+            <div class="qmc-feature-item">
+              <i class="fas fa-shield-halved" style="color:#dc2626;"></i>
+              <span><strong>محاكاة قاعة التوجيهي:</strong> تجربة اختبار حقيقية لتقييم مستواك الفعلي بدقة.</span>
+            </div>
+            <div class="qmc-feature-item">
+              <i class="fas fa-clock" style="color:#ea580c;"></i>
+              <span><strong>مؤقت زمني دقيق:</strong> احتساب الوقت التنازلي لإدارة زمن الإجابة والسرعة.</span>
+            </div>
+            <div class="qmc-feature-item">
+              <i class="fas fa-eye-slash" style="color:#64748b;"></i>
+              <span><strong>حجب الإجابات أثناء الحل:</strong> لا تظهر الإجابات الصحيحة والتفسيرات إلا بعد تسليم ورقة الامتحان.</span>
+            </div>
+            <div class="qmc-feature-item">
+              <i class="fas fa-chart-line" style="color:#8b5cf6;"></i>
+              <span><strong>بطاقة نتيجة وتقرير تفصيلي:</strong> تقرير شامل بالعلامة والنسبة المئوية وتوثيق المستوى.</span>
+            </div>
+          </div>
+
+          <button type="button" class="qmc-start-btn btn-start-exam">
+            <i class="fas fa-pen-alt"></i> <span>ابدأ بالنمط الامتحاني</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: STUDENT GOOGLE REGISTRATION BEFORE QUIZ -->
+<div id="student-reg-overlay" class="editor-overlay" onclick="closeStudentRegModal(event)">
+  <div class="editor-modal" style="max-width:440px;" onclick="event.stopPropagation()">
+    <div class="editor-modal-head" style="background:linear-gradient(135deg,#1a3a5c,#2d6096);">
+      <span class="editor-modal-title"><i class="fas fa-user-graduate"></i> تسجيل الطالب لبدء الاختبار</span>
+      <button class="editor-modal-close" onclick="closeStudentRegModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="editor-modal-body" style="padding:18px;">
+      <!-- حالة الطالب المسجل سابقاً: نقرة واحدة فقط للبدء -->
+      <div id="student-reg-returning" style="display:none;background:#e8f4fc;border:1.5px solid #b9d5ee;border-radius:12px;padding:14px;margin-bottom:14px;text-align:center;">
+        <div style="font-size:12px;color:#2980b9;font-weight:700;margin-bottom:4px;">مرحباً بعودتك! بياناتك مسجلة جاهزة:</div>
+        <div style="font-size:16px;font-weight:800;color:#1a3a5c;margin-bottom:2px;" id="returning-student-name"></div>
+        <div style="font-size:12px;color:#555;margin-bottom:12px;" id="returning-student-email"></div>
+        <div style="display:flex;gap:8px;justify-content:center;">
+          <button type="button" class="btn-start-exam-now" onclick="confirmExistingStudentAndLaunch()" style="margin-top:0;padding:10px 20px;font-size:14px;">
+            <i class="fas fa-play"></i> بدء الاختبار مباشرة
+          </button>
+          <button type="button" onclick="showNewStudentForm()" style="background:#fff;border:1px solid #ccc;border-radius:10px;padding:8px 12px;font-size:12px;cursor:pointer;font-family:'Tajawal',sans-serif;">
+            تعديل البيانات
+          </button>
+        </div>
+      </div>
+
+      <!-- نموذج التسجيل عبر إيميل جوجل والاسم -->
+      <div id="student-reg-form">
+        <p style="font-size:12px;color:#4a5568;margin-bottom:14px;line-height:1.6;">
+          يرجى تسجيل بياناتك عبر <strong>إيميل Google</strong> لتوثيق نتيجتك وحفظ تقدمك في الاختبار:
+        </p>
+
+        <!-- زر تسجيل سريع عبر حساب Google -->
+        <button type="button" id="btn-google-signin" class="btn-google-signin" onclick="signInWithGooglePopup()">
+          <svg width="18" height="18" viewBox="0 0 24 24" style="margin-left:6px;">
+            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/>
+            <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+          </svg>
+          <span>تسجيل دخول سريع بحساب Google</span>
+        </button>
+
+        <div style="display:flex;align-items:center;margin:12px 0 10px;gap:8px;">
+          <div style="flex:1;height:1px;background:#e2e8f0;"></div>
+          <span style="font-size:11px;color:#718096;font-weight:700;">أو أدخل إيميل Google يدوياً</span>
+          <div style="flex:1;height:1px;background:#e2e8f0;"></div>
+        </div>
+
+        <div class="ed-field">
+          <label class="ed-label"><i class="fab fa-google" style="color:#ea4335;margin-left:4px;"></i> بريد Google الإلكتروني (Gmail)*</label>
+          <input type="email" id="input-student-email" class="ed-input" placeholder="student@gmail.com" dir="ltr" style="text-align:right;">
+        </div>
+
+        <div class="ed-field">
+          <label class="ed-label"><i class="fas fa-user" style="color:#2980b9;margin-left:4px;"></i> اسم الطالب / الطالبة (ثلاثي)*</label>
+          <input type="text" id="input-student-name" class="ed-input" placeholder="اكتب اسمك كاملاً">
+        </div>
+
+        <div class="ed-field">
+          <label class="ed-label"><i class="fas fa-school" style="color:#27ae60;margin-left:4px;"></i> اسم المدرسة / المديرية (اختياري)</label>
+          <input type="text" id="input-student-school" class="ed-input" placeholder="اسم المدرسة أو المديرية">
+        </div>
+
+        <div id="student-reg-err" class="editor-err" style="display:none"></div>
+
+        <button type="button" class="btn-start-exam-now" onclick="submitStudentRegistrationAndLaunch()">
+          <i class="fas fa-play"></i> بدء الاختبار مباشرة
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: TEACHER DASHBOARD - STUDENTS LIST & RESULTS -->
+<div id="teacher-students-overlay" class="editor-overlay" onclick="closeTeacherStudentsModal(event)">
+  <div class="editor-modal" style="max-width:680px;" onclick="event.stopPropagation()">
+    <div class="editor-modal-head" style="background:linear-gradient(135deg,#1b4f72,#2874a6);">
+      <span class="editor-modal-title"><i class="fas fa-users-cog"></i> لوحة تحكم المعلم — سجل الطلاب والنتائج السحابية</span>
+      <button class="editor-modal-close" onclick="closeTeacherStudentsModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="editor-modal-body" style="padding:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:13px;color:#2c3e50;">
+          إجمالي الطلاب المسجلين: <strong id="ts-students-count" style="color:#27ae60;">0</strong> • المحاولات الموثقة: <strong id="ts-attempts-count" style="color:#2980b9;">0</strong>
+        </div>
+        <button onclick="loadTeacherStudentsData()" style="background:#eaf2f8;border:1px solid #aed6f1;color:#1b4f72;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'Tajawal',sans-serif;font-weight:700;">
+          <i class="fas fa-sync-alt"></i> تحديث السجل
+        </button>
+      </div>
+
+      <div id="ts-content" style="max-height:420px;overflow-y:auto;padding:4px;">
+        <div style="text-align:center;padding:24px;color:#7f8c8d;">جاري تحميل سجلات الطلاب من السحابة...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: IMAGE LIGHTBOX -->
+<div id="image-lightbox-overlay" class="editor-overlay image-lightbox-overlay" onclick="closeImageLightbox(event)">
+  <div class="image-lightbox-container" onclick="event.stopPropagation()">
+    <div class="image-lightbox-header">
+      <span class="image-lightbox-caption" id="lightbox-caption">معاينة الصورة</span>
+      <div class="image-lightbox-tools">
+        <button type="button" class="lightbox-btn" onclick="zoomLightboxImage(1.2)" title="تكبير"><i class="fas fa-search-plus"></i></button>
+        <button type="button" class="lightbox-btn" onclick="zoomLightboxImage(0.8)" title="تصغير"><i class="fas fa-search-minus"></i></button>
+        <button type="button" class="lightbox-btn" onclick="resetLightboxZoom()" title="إعادة ضبط"><i class="fas fa-undo"></i></button>
+        <button type="button" class="lightbox-btn lightbox-close" onclick="closeImageLightbox()" title="إغلاق"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+    <div class="image-lightbox-body">
+      <img id="lightbox-img" src="" alt="صورة السؤال" />
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: SOCIAL SHARE -->
+<div id="share-modal-overlay" class="editor-overlay" onclick="closeShareModal(event)">
+  <div class="editor-modal share-modal" onclick="event.stopPropagation()">
+    <div class="editor-modal-head share-modal-head">
+      <span class="editor-modal-title"><i class="fas fa-share-nodes"></i> مشاركة الاختبار والنتائج</span>
+      <button type="button" class="editor-modal-close" onclick="closeShareModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="editor-modal-body share-modal-body">
+      <!-- Tabs for sharing mode -->
+      <div class="share-tabs" id="share-tabs">
+        <button type="button" class="share-tab active" id="tab-share-quiz" onclick="switchShareTab('quiz')">
+          <i class="fas fa-link"></i> مشاركة رابط الاختبار
+        </button>
+        <button type="button" class="share-tab" id="tab-share-result" onclick="switchShareTab('result')">
+          <i class="fas fa-award"></i> مشاركة بطاقة النتيجة
+        </button>
+      </div>
+
+      <!-- Preview card -->
+      <div class="share-preview-card">
+        <div class="spc-badge" id="spc-badge"><i class="fas fa-graduation-cap"></i> بنك أسئلة الثقافة المالية</div>
+        <div class="spc-text" id="spc-text"></div>
+        <div class="spc-url" id="spc-url"></div>
+      </div>
+
+      <!-- Social Media Direct Buttons -->
+      <div class="share-channels-title">اختر وسيلة المشاركة:</div>
+      <div class="share-channels-grid">
+        <button type="button" class="sc-btn sc-whatsapp" onclick="triggerSocialShare('whatsapp')">
+          <i class="fa-brands fa-whatsapp"></i>
+          <span>واتساب</span>
+        </button>
+        <button type="button" class="sc-btn sc-telegram" onclick="triggerSocialShare('telegram')">
+          <i class="fa-brands fa-telegram"></i>
+          <span>تيليجرام</span>
+        </button>
+        <button type="button" class="sc-btn sc-facebook" onclick="triggerSocialShare('facebook')">
+          <i class="fa-brands fa-facebook-f"></i>
+          <span>فيسبوك</span>
+        </button>
+        <button type="button" class="sc-btn sc-x" onclick="triggerSocialShare('x')">
+          <i class="fa-brands fa-x-twitter"></i>
+          <span>إكس</span>
+        </button>
+        <button type="button" class="sc-btn sc-native" id="btn-native-share" onclick="triggerSocialShare('native')">
+          <i class="fas fa-share-alt"></i>
+          <span>تطبيقات أخرى</span>
+        </button>
+      </div>
+
+      <!-- Copy link & text bar -->
+      <div class="share-copy-box">
+        <input type="text" id="share-copy-input" class="share-copy-input" readonly dir="ltr">
+        <button type="button" class="share-copy-btn" id="btn-copy-share" onclick="copyShareFromModal()">
+          <i class="fas fa-copy"></i> <span>نسخ</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: TEXTBOOK VIEWER / DOWNLOADER -->
+<div id="book-modal-overlay" class="editor-overlay" onclick="closeBookModal(event)">
+  <div class="editor-modal book-modal" style="max-width:700px;" onclick="event.stopPropagation()">
+    <div class="editor-modal-head" id="book-modal-header" style="background:linear-gradient(135deg,#1a3a5c,#2d6096);">
+      <span class="editor-modal-title" id="book-modal-title"><i class="fas fa-book"></i> كتاب المنهاج</span>
+      <button class="editor-modal-close" onclick="closeBookModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="editor-modal-body" id="book-modal-body" style="padding:18px;">
+      <!-- يتم تعبئة المحتوى ديناميكياً -->
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: UNDER CONSTRUCTION (أقيم تعلمي / دوسية الكتاب) -->
+<div id="construction-modal-overlay" class="editor-overlay" onclick="closeConstructionModal(event)">
+  <div class="editor-modal" style="max-width:560px;text-align:center;padding:26px 20px;" onclick="event.stopPropagation()">
+    <div style="width:72px;height:72px;border-radius:50%;background:#fef3c7;color:#d97706;display:inline-flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:14px;box-shadow:0 4px 14px rgba(217,119,6,0.2);">
+      <i class="fas fa-tools"></i>
+    </div>
+    <div id="construction-modal-title" style="font-size:20px;font-weight:800;color:var(--pr);margin-bottom:8px;">
+      قسم حل أسئلة «أقيم تعلمي» قيد الإنشاء والتجهيز
+    </div>
+    <div id="construction-modal-badge" style="display:inline-block;background:#fffbeb;color:#b45309;border:1.5px solid #fde68a;border-radius:20px;padding:4px 14px;font-size:13px;font-weight:700;margin-bottom:14px;">
+      <i class="fas fa-hourglass-half"></i> يجري العمل على إعدادها وتدقيقها وفق طبعة 2026 المنقحة
+    </div>
+    <div id="construction-modal-text" style="font-size:14.5px;color:#334155;line-height:1.75;margin-bottom:20px;text-align:right;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px;">
+      <div style="margin-bottom:8px;">
+        <strong style="color:#0f172a;"><i class="fas fa-info-circle" style="color:#0284c7;"></i> تنويه للطلبة الأعزاء:</strong>
+      </div>
+      يجري حالياً إعداد وتدقيق الإجابات والشروحات التفسيرية والسند العلمي لكتابي <strong>الفصل الدراسي الأول</strong> و<strong>الفصل الدراسي الثاني</strong> وفق طبعة كتاب الطالب الصادرة عن المركز الوطني لتطوير المناهج والتقويم (2025/2026).
+      <div style="margin-top:10px;font-size:13.5px;color:#0369a1;background:#eef6fc;border-radius:8px;padding:8px 12px;">
+        <i class="fas fa-check-circle" style="color:#0284c7;"></i> في هذه الأثناء، يمكنك التدرب على جميع أسئلة المنهاج والتمارين والوزاريات فوراً عبر أقسام: <strong>«اختبار حسب الدرس»</strong> و<strong>«اختبار حسب الوحدة»</strong>.
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button type="button" class="btn" style="min-width:140px;background:var(--pr);color:#fff;" onclick="closeConstructionModal()">
+        <i class="fas fa-check"></i> حسناً، مفهوم
+      </button>
+      <button type="button" class="btn" style="min-width:140px;background:#f1f5f9;color:var(--pr);border:1.5px solid #cbd5e1;" onclick="closeConstructionModal();renderLessonPage();goTo('lessons');">
+        <i class="fas fa-book-open"></i> الانتقال لاختبار الدروس
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: INTERACTIVE DIGITAL BOOK READER (قراءة وتصفح الكتاب الرقمي وصفحاته المعتمدة) -->
+<div id="digital-book-reader-overlay" class="editor-overlay reader-overlay" onclick="closeDigitalReader(event)">
+  <div class="editor-modal reader-modal" onclick="event.stopPropagation()">
+    <!-- Top Reader Bar -->
+    <div class="reader-top-bar" id="reader-top-bar">
+      <div class="reader-top-info">
+        <span class="reader-book-title" id="reader-book-title">
+          <i class="fas fa-book-open"></i> كتاب الثقافة المالية الرقمي
+        </span>
+        <span class="reader-cloud-tag" title="بيانات الكتاب ومحتوياته مخزنة ومدارة سحابياً عبر قاعدة بيانات Firebase">
+          <i class="fas fa-cloud"></i> سحابة Firebase
+        </span>
+      </div>
+      
+      <div class="reader-nav-controls">
+        <button type="button" class="rdr-btn" onclick="readerPrevPage()" title="الصفحة السابقة">
+          <i class="fas fa-chevron-right"></i> <span>السابق</span>
+        </button>
+        <div class="rdr-page-indicator">
+          <span>صفحة</span>
+          <input type="number" id="rdr-page-input" min="1" max="140" value="1" onchange="readerGoToInputPage()" />
+          <span id="rdr-total-pages-label">من 140</span>
+        </div>
+        <button type="button" class="rdr-btn" onclick="readerNextPage()" title="الصفحة التالية">
+          <span>التالي</span> <i class="fas fa-chevron-left"></i>
+        </button>
+      </div>
+
+      <div class="reader-top-tools">
+        <button type="button" class="rdr-tool-btn" id="reader-tts-btn" onclick="readerSpeakCurrentPage()" title="قراءة صوتية ذكية باللغة العربية لنصوص الصفحة الحالية">
+          <i class="fas fa-volume-up"></i> <span class="hide-mobile">استمع للصفحة</span>
+        </button>
+        <button type="button" class="rdr-tool-btn" onclick="readerAdjustFontSize(1)" title="تكبير الخط">
+          <i class="fas fa-font"></i>+
+        </button>
+        <button type="button" class="rdr-tool-btn" onclick="readerAdjustFontSize(-1)" title="تصغير الخط">
+          <i class="fas fa-font"></i>-
+        </button>
+        <button type="button" class="rdr-tool-btn hide-mobile" onclick="readerToggleFullscreen()" title="ملء الشاشة">
+          <i class="fas fa-expand"></i>
+        </button>
+        <button type="button" class="editor-modal-close" onclick="closeDigitalReader()" title="إغلاق القارئ">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Reader Mode Tabs -->
+    <div class="reader-view-tabs">
+      <button type="button" class="rdr-tab-btn active" id="tab-btn-interactive" onclick="readerSwitchTab('interactive')">
+        <i class="fas fa-book-reader"></i> <span>عرض الصفحات التفاعلية والشروح</span>
+      </button>
+      <button type="button" class="rdr-tab-btn" id="tab-btn-pdf" onclick="readerSwitchTab('pdf')">
+        <i class="fas fa-file-pdf"></i> <span>النسخة المصورة الأصلية (PDF الوزاري المدمج)</span>
+      </button>
+    </div>
+
+    <!-- Reader Main Content Body -->
+    <div class="reader-main-body">
+      <!-- Sidebar: Table of Contents -->
+      <div class="reader-sidebar" id="reader-sidebar">
+        <div class="reader-sb-head">
+          <div style="font-size:14px;font-weight:800;color:var(--pr);"><i class="fas fa-list-ul"></i> فهرس الكتاب والدروس</div>
+          <button type="button" class="rdr-sb-close-mobile" onclick="readerToggleSidebar()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="reader-sb-search">
+          <i class="fas fa-search"></i>
+          <input type="text" id="reader-search-input" placeholder="ابحث في دروس وصفحات الكتاب..." oninput="readerFilterLessons(this.value)" />
+        </div>
+        <div class="reader-toc-list" id="reader-toc-list">
+          <!-- يتم ملء الفهرس ديناميكياً -->
+        </div>
+      </div>
+
+      <!-- Center Area: Page Stage -->
+      <div class="reader-stage-container" id="reader-stage-container">
+        <!-- Interactive Page View -->
+        <div class="reader-page-view" id="reader-page-view">
+          <div class="textbook-sheet" id="textbook-sheet">
+            <!-- سيتم توليد محتوى صفحة الكتاب ديناميكياً -->
+          </div>
+        </div>
+
+        <!-- Embedded PDF View -->
+        <div class="reader-pdf-view" id="reader-pdf-view" style="display:none;">
+          <div class="reader-pdf-toolbar">
+            <span id="pdf-toolbar-title"><i class="fas fa-file-pdf" style="color:#ef4444;"></i> نسخة الكتاب المدرسية بصيغة PDF الرقمية</span>
+            <div style="display:flex;gap:8px;">
+              <a href="#" id="pdf-direct-download-btn" target="_blank" rel="noopener noreferrer" class="rdr-download-btn">
+                <i class="fas fa-download"></i> <span>تنزيل PDF</span>
+              </a>
+              <a href="#" id="pdf-external-view-btn" target="_blank" rel="noopener noreferrer" class="rdr-download-btn" style="background:#0284c7;">
+                <i class="fas fa-external-link-alt"></i> <span>فتح بنافذة خارجية</span>
+              </a>
+            </div>
+          </div>
+          <iframe id="reader-pdf-iframe" class="reader-pdf-frame" title="عارض كتاب المنهاج المدرسي الرسمي" src="about:blank"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Bottom Quick Toolbar -->
+    <div class="reader-mobile-bottom-bar">
+      <button type="button" class="rdr-mb-btn" onclick="readerToggleSidebar()">
+        <i class="fas fa-list-ul"></i> <span>الفهرس</span>
+      </button>
+      <button type="button" class="rdr-mb-btn" onclick="readerPrevPage()">
+        <i class="fas fa-chevron-right"></i> <span>السابق</span>
+      </button>
+      <span class="rdr-mb-page" id="rdr-mb-page-label">صفحة 1</span>
+      <button type="button" class="rdr-mb-btn" onclick="readerNextPage()">
+        <span>التالي</span> <i class="fas fa-chevron-left"></i>
+      </button>
+      <button type="button" class="rdr-mb-btn" onclick="readerSpeakCurrentPage()">
+        <i class="fas fa-volume-up"></i> <span>صوت</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-box" class="toast-box"></div>
+
+<script src="questions.js"></script>
+<script src="aqyem_data.js"></script>
+<script src="script.js"></script>
+<script>
+  // 1) تطبيق المحذوفات أولاً (لإزالة الأسئلة قبل معالجة الإضافات والتعديلات)
+  applyLocalDeletions();
+  // 2) تطبيق الأسئلة المُضافة محفوظة محلياً
+  applyLocalAdditions();
+  // 3) تطبيق أي تعديلات محفوظة محلياً قبل عرض الصفحة لسرعة العرض الفورية
+  applyLocalOverrides();
+  // 4) جلب ومزامنة أحدث التعديلات والأسئلة مباشرة من قاعدة بيانات Firebase Firestore السحابية
+  syncFromFirestore(true);
+  if (typeof syncAqyemFromFirestore === 'function') {
+    syncAqyemFromFirestore(true);
+  }
+
+  // وضع المحرر غير فعال عند فتح البرنامج ويتطلب دائماً إدخال كلمة المرور (الباسورد) لتفعيله
+  editorMode = false;
+  localStorage.removeItem('qbank_editor_active');
+  document.body.classList.remove('editor-on');
+
+  // عرض الصفحة الرئيسية هي الصفحة الأولى للبرنامج مباشرة أو استئناف الاختبار عند إعادة التحميل أثناء جلسة نشطة
+  var savedSession = (typeof getActiveSession === 'function') ? getActiveSession() : null;
+  var lastPage = null;
+  try { lastPage = sessionStorage.getItem('qbank_last_page'); } catch(e){}
+  if (savedSession && lastPage === 'quiz') {
+    showPage('home');
+    setTimeout(function(){
+      resumeStudentSession();
+    }, 150);
+  } else {
+    // الصفحة الأولى هي الصفحة الرئيسية
+    showPage('home');
+  }
+  // تحديث واجهة زر المحرر ونموذج تسجيل الطالب في الصفحة الرئيسية
+  setTimeout(function(){
+    updateEditorBtnUI();
+    if (typeof initStartStudentForm === 'function') initStartStudentForm();
+  }, 50);
+
+  // مزامنة ذكية خفيفة مع السحابة لتوفير استهلاك الكوتا لآلاف الطلاب
+  window.addEventListener('focus', function(){ 
+    syncFromFirestore(true); 
+    if (typeof syncAqyemFromFirestore === 'function') syncAqyemFromFirestore(true);
+  });
+  setInterval(function(){
+    if (document.visibilityState === 'visible') {
+      syncFromFirestore(true);
+      if (typeof syncAqyemFromFirestore === 'function') syncAqyemFromFirestore(true);
+    }
+  }, 180000);
+</script>
+</body>
+</html>
