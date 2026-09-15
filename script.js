@@ -812,6 +812,131 @@ function renderTAccount(account) {
   return html;
 }
 
+// دالة تحليل واستخراج حسابات دفتر الأستاذ العام (T-Account) من الجداول أو النصوص التحريرية
+function parseGenericLedgerFromText(text) {
+  if (!text) return null;
+  var raw = String(text).trim();
+  if (!/(?:دفتر\s*الأستاذ|T-Account|حساب\s*الأستاذ|منه|له|الجانب\s*المدين|الجانب\s*الدائن|حـ?\/?\s*[^\n\r]+)/i.test(raw)) {
+    return null;
+  }
+
+  // 1. استخراج اسم الحساب
+  var accName = 'الصندوق';
+  var nameMatch = raw.match(/(?:\[دفتر\s*الأستاذ(?::\s*([^\]]+))?\]|دفتر\s*الأستاذ(?:\s*العام)?(?::\s*([^\n\r]+))?|حساب\s*الأستاذ(?::\s*([^\n\r]+))?|حـ?\/?\s*([^\n\r\(\)]+)\s*\(دفتر\s*الأستاذ\))/i);
+  if (nameMatch) {
+    var rawName = nameMatch[1] || nameMatch[2] || nameMatch[3] || nameMatch[4];
+    if (rawName && rawName.trim()) {
+      accName = rawName.trim().replace(/^حـ?\/?\s*/i, '');
+    }
+  }
+
+  var debits = [];
+  var credits = [];
+
+  // فحص جداول الماركداون
+  var lines = raw.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+  var tableLines = lines.filter(function(l){ return l.startsWith('|') && l.endsWith('|'); });
+
+  if (tableLines.length >= 2) {
+    var rows = tableLines.map(function(tl) {
+      var inner = tl.slice(1, -1);
+      return inner.split('|').map(function(c){ return c.trim(); });
+    }).filter(function(r){
+      return !r.every(function(cell){ return /^:?-+:?$/.test(cell); });
+    });
+
+    if (rows.length >= 2) {
+      var header = rows[0];
+      var dataRows = rows.slice(1);
+
+      if (header.length >= 6) {
+        var half = Math.floor(header.length / 2);
+        dataRows.forEach(function(r) {
+          var dAmt = r[0] || '';
+          var dDesc = r[1] || '';
+          var dQNum = (half === 4) ? (r[2] || '') : '';
+          var dDate = (half === 4) ? (r[3] || '') : (r[2] || '');
+
+          var cAmt = r[half] || '';
+          var cDesc = r[half + 1] || '';
+          var cQNum = (half === 4) ? (r[half + 2] || '') : '';
+          var cDate = (half === 4) ? (r[half + 3] || '') : (r[half + 2] || '');
+
+          if (dAmt && dAmt !== '-' && dAmt !== '&nbsp;') {
+            debits.push({ amount: dAmt, desc: dDesc, qNum: dQNum, date: dDate });
+          }
+          if (cAmt && cAmt !== '-' && cAmt !== '&nbsp;') {
+            credits.push({ amount: cAmt, desc: cDesc, qNum: cQNum, date: cDate });
+          }
+        });
+      } else if (header.length >= 4) {
+        dataRows.forEach(function(r) {
+          var dAmt = r[0] || '';
+          var dDesc = r[1] || '';
+          var cAmt = r[2] || '';
+          var cDesc = r[3] || '';
+          if (dAmt && dAmt !== '-' && dAmt !== '&nbsp;') {
+            debits.push({ amount: dAmt, desc: dDesc, qNum: '', date: '' });
+          }
+          if (cAmt && cAmt !== '-' && cAmt !== '&nbsp;') {
+            credits.push({ amount: cAmt, desc: cDesc, qNum: '', date: '' });
+          }
+        });
+      }
+    }
+  }
+
+  // إذا لم يتم استخراج حركات من الجدول، نفحص أسطر النص العادي
+  if (debits.length === 0 && credits.length === 0) {
+    var curSide = 'none';
+    lines.forEach(function(l) {
+      if (/(?:الجانب\s*المدين|طرف\s*مدين|منه|مدين:)/i.test(l)) {
+        curSide = 'debit';
+        l = l.replace(/.*(?:الجانب\s*المدين|طرف\s*مدين|منه|مدين:)\s*/i, '').trim();
+      } else if (/(?:الجانب\s*الدائن|طرف\s*دائن|له|دائن:)/i.test(l)) {
+        curSide = 'credit';
+        l = l.replace(/.*(?:الجانب\s*الدائن|طرف\s*دائن|له|دائن:)\s*/i, '').trim();
+      }
+
+      if (!l || /^\[.*\]$/.test(l) || /^[=\-#─]+$/.test(l)) return;
+
+      var isDeb = (curSide === 'debit') || /^(?:إلى|الى)\s*حـ?\//i.test(l) || /مدين/i.test(l);
+      var isCred = (curSide === 'credit') || /^من\s*حـ?\//i.test(l) || /دائن/i.test(l);
+
+      var dateVal = '';
+      var dateMatch = l.match(/\(?بتاريخ\s*([0-9]{4}\/[0-9]{1,2}\/[0-9]{1,2}(?:\s*م)?|[0-9]{1,2}\/[0-9]{1,2}(?:\s*م)?)\)?/i) || l.match(/\(([0-9]{4}\/[0-9]{1,2}\/[0-9]{1,2}(?:\s*م)?)\)/i);
+      if (dateMatch) {
+        dateVal = dateMatch[1].trim();
+        l = l.replace(dateMatch[0], '').trim();
+      }
+
+      var numMatch = l.match(/([0-9,.]+)\s*(?:دينار)?/);
+      if (numMatch) {
+        var amt = numMatch[1];
+        var desc = l.replace(numMatch[0], '').replace(/^[\s\-\*•:]+/, '').trim();
+        if (isDeb && !isCred) {
+          if (!desc.startsWith('إلى') && !desc.startsWith('الى')) desc = 'إلى حـ/ ' + desc.replace(/^حـ?\/?\s*/, '');
+          debits.push({ amount: amt, desc: desc, qNum: '', date: dateVal });
+        } else if (isCred) {
+          if (!desc.startsWith('من')) desc = 'من حـ/ ' + desc.replace(/^حـ?\/?\s*/, '');
+          credits.push({ amount: amt, desc: desc, qNum: '', date: dateVal });
+        }
+      }
+    });
+  }
+
+  if (debits.length > 0 || credits.length > 0) {
+    return renderTAccount({
+      name: 'حـ / ' + accName,
+      debits: debits,
+      credits: credits
+    });
+  }
+
+  return null;
+}
+window.parseGenericLedgerFromText = parseGenericLedgerFromText;
+
 // دالة فحص واستخراج حسابات دفتر الأستاذ وعرضها كجداول نموذجية
 function renderLedgerBlockFromText(text) {
   if (!/(?:دفتر\s*الأستاذ|ترحيل\s*وترصيد|ترصيد\s*الحسابات|T-Account|حساب\s*الأثاث|حساب\s*الصندوق|حساب\s*البنك|حـ?\/?\s*البنك)/i.test(text)) return null;
@@ -1034,6 +1159,11 @@ function renderLedgerBlockFromText(text) {
     return container;
   }
 
+  var genericLedger = parseGenericLedgerFromText(text);
+  if (genericLedger) {
+    return '<div class="ledger-tables-container">' + genericLedger + '</div>';
+  }
+
   return null;
 }
 
@@ -1069,10 +1199,11 @@ function parseAndRenderAccountingLine(rawLine) {
 
   // حالة 1: قيد مركب - من مذكورين
   if (/من\s*مذكورين/i.test(raw)) {
-    var parts = raw.split(/[-–—]?\s*(إلى\s*مذكورين|الى\s*مذكورين|إلى\s*حـ?\/|الى\s*حـ?\/|إلى\s*ح\/|الى\s*ح\/)\s*/i);
-    var debitSide = parts[0].replace(/^.*من\s*مذكورين:?\s*/i, '');
-    var creditOp = parts[1] || '';
-    var creditSide = parts.slice(2).join('') || '';
+    var creditMatch = raw.match(/([\d,.]+)?\s*[-–—]?\s*(إلى\s*مذكورين|الى\s*مذكورين|إلى\s*حـ?\/|الى\s*حـ?\/|إلى\s*ح\/|الى\s*ح\/)\s*([\s\S]*)$/i);
+    var debitSide = creditMatch ? raw.slice(0, creditMatch.index).replace(/^.*من\s*مذكورين:?\s*/i, '').trim() : raw.replace(/^.*من\s*مذكورين:?\s*/i, '').trim();
+    var preCreditAmt = creditMatch ? (creditMatch[1] || '') : '';
+    var creditOp = creditMatch ? (creditMatch[2] || '') : '';
+    var creditSide = creditMatch ? (creditMatch[3] || '').trim() : '';
 
     html += '<div class="entry-line entry-compound-head"><i class="fas fa-layer-group" style="color:#059669;"></i> من مذكورين:</div>';
     var debitItems = debitSide.split(/\+|\n|;/);
@@ -1086,7 +1217,7 @@ function parseAndRenderAccountingLine(rawLine) {
         if (/^\d/.test(mAmt[1])) { amt = mAmt[1]; acc = mAmt[2]; }
         else { amt = mAmt[2]; acc = mAmt[1]; }
       }
-      acc = acc.replace(/^من\s*حـ?\/?\s*/i, '').replace(/^حـ?\/?\s*/i, '').trim();
+      acc = acc.replace(/^من\s*حـ?\/?\s*/i, '').replace(/^حـ?\/?\s*/i, '').replace(/^من\s+/i, '').trim();
       html += '<div class="entry-line entry-debit">' +
         formatAmountBadge(amt) +
         '<span class="entry-side-tag">من حـ/</span>' +
@@ -1095,7 +1226,6 @@ function parseAndRenderAccountingLine(rawLine) {
     });
 
     if (creditSide || creditOp) {
-      var fullCredit = (creditOp ? (creditOp + ' ' + creditSide) : creditSide).trim();
       if (/مذكورين/i.test(creditOp)) {
         html += '<div class="entry-line entry-compound-head"><i class="fas fa-layer-group" style="color:#0284c7;"></i> إلى مذكورين:</div>';
         var cItems = creditSide.split(/\+|\n|;/);
@@ -1117,9 +1247,14 @@ function parseAndRenderAccountingLine(rawLine) {
           '</div>';
         });
       } else {
-        var cAmtMatch = fullCredit.match(/([\d,.]+)$/) || fullCredit.match(/^([\d,.]+)\s*(.*)$/);
-        var cAmt = cAmtMatch ? (/^\d/.test(cAmtMatch[1]) ? cAmtMatch[1] : cAmtMatch[2]) : '';
-        var cAcc = fullCredit.replace(/^(?:إلى|الى)\s*حـ?\/?\s*/i, '').replace(/[\d,.]+$/, '').trim();
+        var cAmt = preCreditAmt || '';
+        var cAcc = creditSide;
+        var cAmtMatch = creditSide.match(/^([\d,.]+)\s*(.*)$/) || creditSide.match(/^(.*?)\s+([\d,.]+)$/);
+        if (cAmtMatch) {
+          if (/^\d/.test(cAmtMatch[1])) { cAmt = cAmt || cAmtMatch[1]; cAcc = cAmtMatch[2]; }
+          else { cAmt = cAmt || cAmtMatch[2]; cAcc = cAmtMatch[1]; }
+        }
+        cAcc = cAcc.replace(/^(?:إلى|الى)\s*حـ?\/?\s*/i, '').replace(/^حـ?\/?\s*/i, '').trim();
         html += '<div class="entry-line entry-credit">' +
           formatAmountBadge(cAmt) +
           '<span class="entry-side-tag">إلى حـ/</span>' +
@@ -1141,7 +1276,7 @@ function parseAndRenderAccountingLine(rawLine) {
       if (/^\d/.test(dAmtMatch[1])) { dAmt = dAmtMatch[1]; dAcc = dAmtMatch[2]; }
       else { dAmt = dAmtMatch[2]; dAcc = dAmtMatch[1]; }
     }
-    dAcc = dAcc.replace(/^من\s*حـ?\/?\s*/i, '').trim();
+    dAcc = dAcc.replace(/^من\s*حـ?\/?\s*/i, '').replace(/^حـ?\/?\s*/i, '').trim();
 
     html += '<div class="entry-line entry-debit">' +
       formatAmountBadge(dAmt) +
@@ -1171,9 +1306,24 @@ function parseAndRenderAccountingLine(rawLine) {
   }
   // حالة 3: قيد بسيط (طرف مدين وطرف دائن)
   else if (hasMin && hasIla) {
-    var splitMatch = raw.match(/\s*[-–—]?\s*(إلى\s*حـ?\/.*|الى\s*حـ?\/.*)$/i);
-    var dStr = splitMatch ? raw.slice(0, splitMatch.index).trim() : raw;
-    var cStr = splitMatch ? splitMatch[1].trim() : '';
+    var dStr = '';
+    var cStr = '';
+    var midAmt = '';
+
+    if (raw.indexOf('\n') !== -1) {
+      var rLines = raw.split(/\n+/).map(function(l){ return l.trim(); }).filter(Boolean);
+      dStr = rLines.filter(function(l){ return /(?:من\s*حـ?\/|من\s*ح\/)/i.test(l); }).join(' ') || rLines[0] || '';
+      cStr = rLines.filter(function(l){ return /(?:إلى\s*حـ?\/|إلى\s*ح\/|الى\s*حـ?\/|الى\s*ح\/)/i.test(l); }).join(' ') || rLines[1] || '';
+    } else {
+      var splitMatch = raw.match(/\s*[-–—]?\s*(?:([\d,.]+)\s*)?[-–—]?\s*(إلى\s*حـ?\/.*|الى\s*حـ?\/.*)$/i);
+      if (splitMatch) {
+        dStr = raw.slice(0, splitMatch.index).trim();
+        midAmt = splitMatch[1] || '';
+        cStr = splitMatch[2].trim();
+      } else {
+        dStr = raw;
+      }
+    }
 
     var dAmtMatch = dStr.match(/^([\d,.]+)\s*(.*)$/) || dStr.match(/^(.*?)\s+([\d,.]+)$/);
     var dAmt = '';
@@ -1182,17 +1332,22 @@ function parseAndRenderAccountingLine(rawLine) {
       if (/^\d/.test(dAmtMatch[1])) { dAmt = dAmtMatch[1]; dAcc = dAmtMatch[2]; }
       else { dAmt = dAmtMatch[2]; dAcc = dAmtMatch[1]; }
     }
-    dAcc = dAcc.replace(/^من\s*حـ?\/?\s*/i, '').trim();
-
-    var cAmt = '';
-    var cAcc = cStr;
-    var cAmtMatch = cStr.match(/^([\d,.]+)\s*(.*)$/) || cStr.match(/^(.*?)\s+([\d,.]+)$/);
-    if (cAmtMatch) {
-      if (/^\d/.test(cAmtMatch[1])) { cAmt = cAmtMatch[1]; cAcc = cAmtMatch[2]; }
-      else { cAmt = cAmtMatch[2]; cAcc = cAmtMatch[1]; }
+    if (!dAmt && midAmt) {
+      var cHasAmt = /(?:^|\s)([\d,.]+)(?:\s|$)/.test(cStr);
+      if (cHasAmt) { dAmt = midAmt; midAmt = ''; }
     }
-    cAcc = cAcc.replace(/^(?:إلى|الى)\s*حـ?\/?\s*/i, '').trim();
+    dAcc = dAcc.replace(/^من\s*حـ?\/?\s*/i, '').replace(/^حـ?\/?\s*/i, '').replace(/[-–—]+$/, '').trim();
+
+    var cAmtMatch = cStr.match(/^([\d,.]+)\s*(.*)$/) || cStr.match(/^(.*?)\s+([\d,.]+)$/);
+    var cAmt = midAmt || '';
+    var cAcc = cStr;
+    if (cAmtMatch) {
+      if (/^\d/.test(cAmtMatch[1])) { cAmt = cAmt || cAmtMatch[1]; cAcc = cAmtMatch[2]; }
+      else { cAmt = cAmt || cAmtMatch[2]; cAcc = cAmtMatch[1]; }
+    }
+    cAcc = cAcc.replace(/^(?:إلى|الى)\s*حـ?\/?\s*/i, '').replace(/^حـ?\/?\s*/i, '').trim();
     if (!cAmt && dAmt) cAmt = dAmt;
+    if (!dAmt && cAmt) dAmt = cAmt;
 
     html += '<div class="entry-line entry-debit">' +
       formatAmountBadge(dAmt) +
@@ -1696,8 +1851,75 @@ function formatQuestionContent(text) {
       isTrialBalance = true;
     }
 
-    var tHtml = '<div class="qtable-wrap"><table class="qtable">';
-    if (isTrialBalance) {
+    // 1. التحقق إن كان الجدول دفتر أستاذ (T-Account)
+    var lHeaderStr = headerRow.join(' ');
+    if (/(?:منه|له|الجانب\s*المدين|الجانب\s*الدائن)/i.test(lHeaderStr) || (headerRow.length >= 6 && /مدين/i.test(lHeaderStr) && /دائن/i.test(lHeaderStr))) {
+      var genLedgerHtml = parseGenericLedgerFromText(tableBuffer.join('\n'));
+      if (genLedgerHtml) {
+        outLines.push(storeBlock('<div class="ledger-tables-container">' + genLedgerHtml + '</div>'));
+        tableBuffer = [];
+        return;
+      }
+    }
+
+    // 2. التحقق إن كان الجدول دفتر يومية نموذجي
+    var jDebitIdx = -1, jCreditIdx = -1, jDescIdx = -1, jQNumIdx = -1, jDateIdx = -1;
+    for (var h = 0; h < headerRow.length; h++) {
+      var colName = headerRow[h];
+      if (/^مدين|مبلغ\s*مدين/i.test(colName) && !/أرصدة|ارصدة/i.test(colName)) jDebitIdx = h;
+      else if (/^دائن|مبلغ\s*دائن/i.test(colName) && !/أرصدة|ارصدة/i.test(colName)) jCreditIdx = h;
+      else if (/البيان|بيان|اسم\s*الحساب|الحساب/i.test(colName)) jDescIdx = h;
+      else if (/رقم\s*القيد|رقم\s*الصفحة|صفحة/i.test(colName)) jQNumIdx = h;
+      else if (/التاريخ|تاريخ/i.test(colName)) jDateIdx = h;
+    }
+    var isJournalTable = (jDebitIdx !== -1 && jCreditIdx !== -1 && jDescIdx !== -1 && !isTrialBalance);
+
+    var tHtml = '';
+    if (isJournalTable) {
+      tHtml = '<div class="journal-book-container"><div class="journal-book-scroll"><table class="journal-book-table" dir="rtl">';
+      tHtml += '<thead><tr>';
+      tHtml += '<th class="jb-th jb-col-debit">مدين</th>';
+      tHtml += '<th class="jb-th jb-col-credit">دائن</th>';
+      tHtml += '<th class="jb-th jb-col-desc">البيان</th>';
+      if (jQNumIdx !== -1) tHtml += '<th class="jb-th jb-col-qnum">رقم القيد</th>';
+      if (jDateIdx !== -1) tHtml += '<th class="jb-th jb-col-date">التاريخ</th>';
+      tHtml += '</tr></thead><tbody>';
+
+      var startIdx = hasDivider ? 2 : 1;
+      for (var r = startIdx; r < rows.length; r++) {
+        var row = rows[r];
+        if (isDivider(row)) continue;
+        var dVal = row[jDebitIdx] !== undefined ? row[jDebitIdx] : '';
+        var cVal = row[jCreditIdx] !== undefined ? row[jCreditIdx] : '';
+        var descVal = row[jDescIdx] !== undefined ? row[jDescIdx] : '';
+        var qVal = (jQNumIdx !== -1 && row[jQNumIdx] !== undefined) ? row[jQNumIdx] : '';
+        var dtVal = (jDateIdx !== -1 && row[jDateIdx] !== undefined) ? row[jDateIdx] : '';
+
+        var isTotal = /مجموع|إجمالي|المجموع/i.test(descVal) || /مجموع|إجمالي|المجموع/i.test(dVal) || /مجموع|إجمالي|المجموع/i.test(cVal);
+        if (isTotal) {
+          tHtml += '<tr class="jb-row-totals">';
+          tHtml += '<td class="jb-td jb-cell-debit">' + (dVal || '-') + '</td>';
+          tHtml += '<td class="jb-td jb-cell-credit">' + (cVal || '-') + '</td>';
+          tHtml += '<td class="jb-td jb-cell-desc" style="font-weight:900;">' + (descVal || 'المجموع') + '</td>';
+          if (jQNumIdx !== -1) tHtml += '<td class="jb-td" colspan="' + (jDateIdx !== -1 ? 2 : 1) + '">&nbsp;</td>';
+          tHtml += '</tr>';
+        } else {
+          var descCls = 'jb-desc-debit';
+          if (/^(?:إلى|الى)\s*حـ?\//i.test(descVal)) descCls = 'jb-desc-credit';
+          else if (/^\([^)]+\)$/.test(descVal)) descCls = 'jb-desc-explanation';
+
+          tHtml += '<tr>';
+          tHtml += '<td class="jb-td jb-cell-debit">' + (dVal && dVal !== '-' ? formatJournalCellAmount(dVal) : '&nbsp;') + '</td>';
+          tHtml += '<td class="jb-td jb-cell-credit">' + (cVal && cVal !== '-' ? formatJournalCellAmount(cVal) : '&nbsp;') + '</td>';
+          tHtml += '<td class="jb-td jb-cell-desc ' + descCls + '">' + (descVal || '-') + '</td>';
+          if (jQNumIdx !== -1) tHtml += '<td class="jb-td jb-cell-qnum">' + (qVal || '-') + '</td>';
+          if (jDateIdx !== -1) tHtml += '<td class="jb-td jb-cell-date">' + (dtVal || '-') + '</td>';
+          tHtml += '</tr>';
+        }
+      }
+      tHtml += '</tbody></table></div></div>';
+    } else if (isTrialBalance) {
+      tHtml = '<div class="qtable-wrap"><table class="qtable">';
       // إجبار الترتيب المطلوب بدقة:
       // اليمين: أرصدة مدينة | الأوسط: أرصدة دائنة | الشمال: اسم الحساب
       tHtml += '<thead><tr>';
@@ -1723,7 +1945,9 @@ function formatQuestionContent(text) {
         tHtml += '<td style="text-align:right; font-weight:700;">' + (nVal || '-') + '</td>';
         tHtml += '</tr>';
       }
+      tHtml += '</tbody></table></div>';
     } else {
+      tHtml = '<div class="qtable-wrap"><table class="qtable">';
       tHtml += '<thead><tr>';
       for (var h = 0; h < headerRow.length; h++) {
         tHtml += '<th>' + (headerRow[h] || '') + '</th>';
@@ -1741,8 +1965,8 @@ function formatQuestionContent(text) {
         }
         tHtml += '</tr>';
       }
+      tHtml += '</tbody></table></div>';
     }
-    tHtml += '</tbody></table></div>';
     outLines.push(storeBlock(tHtml));
     tableBuffer = [];
   }
@@ -1774,15 +1998,25 @@ function formatQuestionContent(text) {
     // فحص كتل دفتر الأستاذ العام وترحيل وترصيد الحسابات (T-Accounts)
     // ══════════════════════════════════════════════════════════════
     var isLedgerSection = (
-      /(?:ترحيل|ترصيد|دفتر\s*الأستاذ)/i.test(trimmed) &&
-      /(?:الأستاذ|T-Account|الحسابات|حـ\/|الصندوق)/i.test(trimmed)
-    ) || (
-      /^(?:ب|\(?ب\)?|\(?ب\s*\+\s*ج\)?|المطلوب\s*ب)\s*[\)\.\-:]/i.test(trimmed) &&
-      /(?:ترحيل|ترصيد|الأستاذ)/i.test(trimmed)
+      /^\[دفتر\s*الأستاذ(?::\s*[^\]]+)?\]/i.test(trimmed) ||
+      /^(?:###?\s*)?دفتر\s*الأستاذ/i.test(trimmed) ||
+      /^(?:###?\s*)?(?:حساب\s*الأستاذ|حساب\s*حرف\s*T|T-Account)/i.test(trimmed) ||
+      ((/(?:ترحيل|ترصيد|دفتر\s*الأستاذ)/i.test(trimmed)) && (/(?:الأستاذ|T-Account|الحسابات|حـ\/|الصندوق)/i.test(trimmed))) ||
+      (/^(?:ب|\(?ب\)?|\(?ب\s*\+\s*ج\)?|المطلوب\s*ب)\s*[\)\.\-:]/i.test(trimmed) && /(?:ترحيل|ترصيد|الأستاذ)/i.test(trimmed))
     );
 
     if (isLedgerSection) {
-      var ledgerHtml = renderLedgerBlockFromText(text);
+      var lSectionLines = [trimmed];
+      var sIdx = i + 1;
+      while (sIdx < lines.length) {
+        var nextL = lines[sIdx].trim();
+        if (/^([─\=\-]{3,}|(?:\(?ج\)?|\(?د\)?|\(?هـ\)?|المطلوب\s*ج)\s*[\)\.\-:]|ميزان\s*المراجعة|دفتر\s*اليومية)/i.test(nextL)) {
+          break;
+        }
+        lSectionLines.push(lines[sIdx]);
+        sIdx++;
+      }
+      var ledgerHtml = renderLedgerBlockFromText(lSectionLines.join('\n')) || renderLedgerBlockFromText(text);
       if (ledgerHtml) {
         if (tableBuffer.length > 0) flushTable();
         var cleanTitle = trimmed.replace(/^[\*\#\-\s]+|[\*\#\-\s:]+$/g, '');
@@ -1790,15 +2024,6 @@ function formatQuestionContent(text) {
         outLines.push(storeBlock(titleHtml));
         outLines.push(storeBlock(ledgerHtml));
 
-        // تخطي الأسطر النصية التابعة لهذا القسم التي تم تمثيلها في جداول دفتر الأستاذ
-        var sIdx = i + 1;
-        while (sIdx < lines.length) {
-          var nextL = lines[sIdx].trim();
-          if (/^([─\=\-]{3,}|(?:\(?ج\)?|\(?د\)?|\(?هـ\)?|المطلوب\s*ج)\s*[\)\.\-:]|ميزان\s*المراجعة)/i.test(nextL)) {
-            break;
-          }
-          sIdx++;
-        }
         i = sIdx - 1;
         continue;
       }
@@ -1844,11 +2069,11 @@ function formatQuestionContent(text) {
     }
 
     // التحقق من القيود المحاسبية المركبة أو متعددة الأسطر المتتابعة
-    var isMinOrIla = function(str) {
-      return /(?:من\s*حـ?\/|من\s*ح\/|من\s*مذكورين|إلى\s*حـ?\/|إلى\s*ح\/|الى\s*حـ?\/|الى\s*ح\/|إلى\s*مذكورين|الى\s*مذكورين)/i.test(str);
+    var isAccountingLine = function(str) {
+      return /(?:من\s*حـ?\/|من\s*ح\/|من\s*مذكورين|إلى\s*حـ?\/|إلى\s*ح\/|الى\s*حـ?\/|الى\s*ح\/|إلى\s*مذكورين|الى\s*مذكورين|حـ?\/|ح\/)/i.test(str);
     };
 
-    if (isMinOrIla(trimmed) || /^((?:\d+[\.\-\)]\s*)*(?:بتاريخ\s*[^:\n]+:?|قيد\s*[^:\n]+:?)+\s*)/i.test(trimmed)) {
+    if (isAccountingLine(trimmed) || /^((?:\d+[\.\-\)]\s*)*(?:بتاريخ\s*[^:\n]+:?|قيد\s*[^:\n]+:?)+\s*)/i.test(trimmed)) {
       // فحص إن كان هذا السطر أو السطور التالية تشكل قيداً متكاملاً متعدد الأسطر
       var chunkLines = [trimmed];
       var nextIdx = i + 1;
@@ -1858,7 +2083,7 @@ function formatQuestionContent(text) {
           nextIdx++;
           continue;
         }
-        if (isMinOrIla(nTrimmed) || /^\([^)]+\)\.?$/.test(nTrimmed)) {
+        if (isAccountingLine(nTrimmed) || /^\([^)]+\)\.?$/.test(nTrimmed)) {
           chunkLines.push(nTrimmed);
           nextIdx++;
         } else {
@@ -1866,8 +2091,8 @@ function formatQuestionContent(text) {
         }
       }
 
-      if (chunkLines.length > 1 && chunkLines.some(isMinOrIla)) {
-        var combinedCandidate = chunkLines.join(' ');
+      if (chunkLines.length > 1 && chunkLines.some(isAccountingLine)) {
+        var combinedCandidate = chunkLines.join('\n');
         var parsedCandidate = parseAndRenderAccountingLine(combinedCandidate);
         if (parsedCandidate) {
           outLines.push(storeBlock(parsedCandidate));
@@ -1885,9 +2110,9 @@ function formatQuestionContent(text) {
     var isCreditLine = /(?:إلى\s*حـ?\/|إلى\s*ح\/|الى\s*حـ?\/|الى\s*ح\/|إلى\s*مذكورين|الى\s*مذكورين)/i.test(nextLine);
 
     if (isDebitLine && isCreditLine && !/(?:إلى|الى)\s*حـ?\//i.test(trimmed)) {
-      var combinedEntry = trimmed + ' - ' + nextLine;
+      var combinedEntry = trimmed + '\n' + nextLine;
       if (/^\([^)]+\)\.?$/.test(thirdLine)) {
-        combinedEntry += ' ' + thirdLine;
+        combinedEntry += '\n' + thirdLine;
         i += 2;
       } else {
         i += 1;
@@ -1984,15 +2209,27 @@ window.addEventListener('keydown', function(e) {
 });
 
 // أدوات تحرير نص السؤال (جداول وصور)
-function buildEditorTextToolbar() {
+function buildEditorTextToolbar(targetId) {
+  var tId = targetId || 'ed-text';
   return '<div class="ed-text-toolbar">' +
     '<div class="ed-toolbar-group">' +
       '<button type="button" class="ed-tb-btn" onclick="triggerImageUpload()"><i class="fas fa-file-image" style="color:#27ae60;"></i> رفع صورة من الجهاز</button>' +
       '<button type="button" class="ed-tb-btn" onclick="promptImageUrl()"><i class="fas fa-link" style="color:#2980b9;"></i> رابط صورة</button>' +
       '<div class="ed-dropdown-wrap">' +
-        '<button type="button" class="ed-tb-btn ed-tb-btn-table" onclick="toggleTableDropdown(event)"><i class="fas fa-table" style="color:#1d4ed8;"></i> إدراج جدول <i class="fas fa-caret-down"></i></button>' +
+        '<button type="button" class="ed-tb-btn ed-tb-btn-table" onclick="toggleAccountingDropdown(event)"><i class="fas fa-balance-scale" style="color:#059669;"></i> إدراج محاسبي <i class="fas fa-caret-down"></i></button>' +
+        '<div class="ed-table-dropdown" id="ed-accounting-dropdown" style="display:none;">' +
+          '<div class="ed-dropdown-item" onclick="insertAccountingStructureTemplate(\'' + tId + '\', \'simple\')"><i class="fas fa-balance-scale"></i> قيد محاسبي بسيط (طرف مدين ودائن)</div>' +
+          '<div class="ed-dropdown-item" onclick="insertAccountingStructureTemplate(\'' + tId + '\', \'compound_debit\')"><i class="fas fa-layer-group"></i> قيد مركب (من مذكورين... إلى حـ/...)</div>' +
+          '<div class="ed-dropdown-item" onclick="insertAccountingStructureTemplate(\'' + tId + '\', \'compound_credit\')"><i class="fas fa-layer-group"></i> قيد مركب (من حـ/... إلى مذكورين...)</div>' +
+          '<div class="ed-dropdown-item" onclick="insertAccountingStructureTemplate(\'' + tId + '\', \'journal\')"><i class="fas fa-book"></i> جدول دفتر اليومية النموذجي (مع التاريخ ورقم القيد)</div>' +
+          '<div class="ed-dropdown-item" onclick="insertAccountingStructureTemplate(\'' + tId + '\', \'ledger\')"><i class="fas fa-columns"></i> جدول دفتر الأستاذ العام (حساب T-Account كامل)</div>' +
+          '<div class="ed-dropdown-item" onclick="insertAccountingStructureTemplate(\'' + tId + '\', \'balances\')"><i class="fas fa-list-alt"></i> ميزان المراجعة بالأرصدة</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ed-dropdown-wrap">' +
+        '<button type="button" class="ed-tb-btn ed-tb-btn-table" onclick="toggleTableDropdown(event)"><i class="fas fa-table" style="color:#1d4ed8;"></i> إدراج جدول عام <i class="fas fa-caret-down"></i></button>' +
         '<div class="ed-table-dropdown" id="ed-table-dropdown" style="display:none;">' +
-          '<div class="ed-dropdown-item" onclick="insertTableTemplate(\'accounting\')"><i class="fas fa-balance-scale"></i> جدول قيد محاسبي (مدين / دائن / بيان)</div>' +
+          '<div class="ed-dropdown-item" onclick="insertTableTemplate(\'accounting\')"><i class="fas fa-balance-scale"></i> جدول محاسبي مالي (مدين / دائن / بيان)</div>' +
           '<div class="ed-dropdown-item" onclick="insertTableTemplate(\'balances\')"><i class="fas fa-list-alt"></i> جدول أرصدة وحسابات (البيان / الرصيد)</div>' +
           '<div class="ed-dropdown-item" onclick="insertTableTemplate(\'statement\')"><i class="fas fa-file-invoice-dollar"></i> جدول قائمة مالية (3 أعمدة)</div>' +
           '<div class="ed-dropdown-item" onclick="insertTableTemplate(\'custom\')"><i class="fas fa-th"></i> جدول مخصص (تحديد الأعمدة والصفوف)</div>' +
@@ -2072,6 +2309,7 @@ window.promptImageUrl = promptImageUrl;
 
 function toggleTableDropdown(e) {
   if (e) e.stopPropagation();
+  closeAccountingDropdown();
   var dd = document.getElementById('ed-table-dropdown');
   if (!dd) return;
   dd.style.display = (dd.style.display === 'none' || !dd.style.display) ? 'block' : 'none';
@@ -2082,7 +2320,50 @@ function closeTableDropdown() {
   var dd = document.getElementById('ed-table-dropdown');
   if (dd) dd.style.display = 'none';
 }
-document.addEventListener('click', closeTableDropdown);
+
+function toggleAccountingDropdown(e) {
+  if (e) e.stopPropagation();
+  closeTableDropdown();
+  var dd = document.getElementById('ed-accounting-dropdown');
+  if (!dd) return;
+  dd.style.display = (dd.style.display === 'none' || !dd.style.display) ? 'block' : 'none';
+}
+window.toggleAccountingDropdown = toggleAccountingDropdown;
+
+function closeAccountingDropdown() {
+  var dd = document.getElementById('ed-accounting-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+document.addEventListener('click', function() {
+  closeTableDropdown();
+  closeAccountingDropdown();
+});
+
+function insertAccountingStructureTemplate(targetId, type) {
+  closeAccountingDropdown();
+  var targetElId = targetId || 'ed-text';
+  var tpl = '';
+  if (type === 'simple') {
+    tpl = '\n\n1000 من حـ/ الصندوق\n1000 إلى حـ/ المبيعات\n(إثبات مبيعات نقدية)\n\n';
+  } else if (type === 'compound_debit') {
+    tpl = '\n\nمن مذكورين:\n1200 حـ/ الصندوق\n800 حـ/ البنك\n2000 إلى حـ/ رأس المال\n(سداد حصة رأس المال)\n\n';
+  } else if (type === 'compound_credit') {
+    tpl = '\n\n5000 من حـ/ المشتريات\nإلى مذكورين:\n3000 حـ/ الصندوق\n2000 حـ/ الموردون\n(شراء بضاعة جزء منها نقداً والباقي على الحساب)\n\n';
+  } else if (type === 'journal') {
+    tpl = '\n\n| مدين | دائن | البيان | رقم القيد | التاريخ |\n|---|---|---|---|---|\n| 15000 | - | من حـ/ البنك | 1 | 2026/1/5م |\n| - | 15000 | إلى حـ/ رأس المال | 1 | 2026/1/5م |\n| (إيداع رأس المال في البنك) | | | | |\n| 15000 | 15000 | المجموع | | |\n\n';
+  } else if (type === 'ledger') {
+    tpl = '\n\n[دفتر الأستاذ: حـ/ الصندوق]\n| منه (مدين) | البيان | رقم القيد | التاريخ | له (دائن) | البيان | رقم القيد | التاريخ |\n|---|---|---|---|---|---|---|---|\n| 10000 | إلى حـ/ رأس المال | 1 | 2026/1/1م | 2000 | من حـ/ الإيجار | 2 | 2026/1/3م |\n| 5000 | إلى حـ/ المبيعات | 3 | 2026/1/10م | 3000 | من حـ/ المشتريات | 4 | 2026/1/15م |\n| - | - | - | - | 10000 | رصيد مدين مرحل | - | 2026/1/31م |\n| 15000 | المجموع | | | 15000 | المجموع | | |\n| 10000 | رصيد مدين منقول | - | 2026/2/1م | - | - | - | - |\n\n';
+  } else if (type === 'balances') {
+    tpl = '\n\n| أرصدة مدينة | أرصدة دائنة | اسم الحساب |\n|---|---|---|\n| 8000 | - | حـ/ الصندوق |\n| 12000 | - | حـ/ البنك |\n| - | 20000 | حـ/ رأس المال |\n| 20000 | 20000 | المجموع |\n\n';
+  }
+
+  insertTextAtCursor(targetElId, tpl);
+  var targetEl = document.getElementById(targetElId);
+  if (targetEl && targetEl.oninput) targetEl.oninput();
+  toast('✅ تم إدراج القالب المحاسبي النموذجي بنجاح!', 'ok');
+}
+window.insertAccountingStructureTemplate = insertAccountingStructureTemplate;
 
 function insertTableTemplate(type) {
   var tpl = '';
@@ -2205,11 +2486,17 @@ function openAddQuestion(lessonName){
     '<div class="ed-field">' +
       '<label class="ed-label">الخيارات (حدد الإجابة الصحيحة)</label>' +
       '<div class="ed-opt-accounting-bar">' +
-        '<div class="ed-opt-accounting-hint"><i class="fas fa-keyboard"></i> يمكنك النقر على <strong>Enter</strong> للنزول سطراً وكتابة قيد محاسبي بسطرين.</div>' +
+        '<div class="ed-opt-accounting-hint"><i class="fas fa-keyboard"></i> يمكنك النقر على <strong>Enter</strong> للنزول سطراً، أو استخدام القوالب المحاسبية الجاهزة للخيارات:</div>' +
         '<div class="ed-opt-accounting-btns">' +
-          '<button type="button" class="ed-tag-accounting" onclick="insertAccountingTemplate()"><i class="fas fa-file-invoice-dollar"></i> قالب قيد محاسبي (من حـ/ ... \n إلى حـ/ ...)</button>' +
+          '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'simple\')"><i class="fas fa-balance-scale"></i> قيد بسيط</button>' +
+          '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'compound_debit\')"><i class="fas fa-layer-group"></i> مركب (من مذكورين)</button>' +
+          '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'compound_credit\')"><i class="fas fa-layer-group"></i> مركب (إلى مذكورين)</button>' +
+          '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'journal\')"><i class="fas fa-book"></i> دفتر اليومية</button>' +
+          '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'ledger\')"><i class="fas fa-columns"></i> دفتر الأستاذ (T)</button>' +
+          '<button type="button" class="ed-tb-preview-btn" onclick="toggleEditorOptionsPreview()" id="btn-toggle-opts-preview" style="padding:4px 10px;font-size:12px;"><i class="fas fa-eye"></i> معاينة الخيارات</button>' +
         '</div>' +
       '</div>' +
+      '<div id="ed-opts-preview" class="ed-opts-preview-box" style="display:none;margin-bottom:12px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px;"></div>' +
       '<div class="ed-opts">';
   for (var j = 0; j < 4; j++){
     body += '<div class="ed-opt-row">' +
@@ -2520,11 +2807,17 @@ function openEditorEdit(questionId){
     body += '<p class="ed-add-hint"><i class="fas fa-lightbulb"></i> هذا السؤال يحتوي على ' + currentOptsCount + ' خيارات فقط — املأ الخيارات الفارغة لإكمالها إلى 4.</p>';
   }
   body += '<div class="ed-opt-accounting-bar">' +
-    '<div class="ed-opt-accounting-hint"><i class="fas fa-keyboard"></i> يمكنك النقر على <strong>Enter</strong> للنزول سطراً وكتابة قيد محاسبي بسطرين.</div>' +
+    '<div class="ed-opt-accounting-hint"><i class="fas fa-keyboard"></i> يمكنك النقر على <strong>Enter</strong> للنزول سطراً، أو استخدام القوالب المحاسبية الجاهزة للخيارات:</div>' +
     '<div class="ed-opt-accounting-btns">' +
-      '<button type="button" class="ed-tag-accounting" onclick="insertAccountingTemplate()"><i class="fas fa-file-invoice-dollar"></i> قالب قيد محاسبي (من حـ/ ... \n إلى حـ/ ...)</button>' +
+      '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'simple\')"><i class="fas fa-balance-scale"></i> قيد بسيط</button>' +
+      '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'compound_debit\')"><i class="fas fa-layer-group"></i> مركب (من مذكورين)</button>' +
+      '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'compound_credit\')"><i class="fas fa-layer-group"></i> مركب (إلى مذكورين)</button>' +
+      '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'journal\')"><i class="fas fa-book"></i> دفتر اليومية</button>' +
+      '<button type="button" class="ed-tag-accounting" onclick="insertAccountingOptionTemplate(\'ledger\')"><i class="fas fa-columns"></i> دفتر الأستاذ (T)</button>' +
+      '<button type="button" class="ed-tb-preview-btn" onclick="toggleEditorOptionsPreview()" id="btn-toggle-opts-preview" style="padding:4px 10px;font-size:12px;"><i class="fas fa-eye"></i> معاينة الخيارات</button>' +
     '</div>' +
   '</div>';
+  body += '<div id="ed-opts-preview" class="ed-opts-preview-box" style="display:none;margin-bottom:12px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px;"></div>';
   body += '<div class="ed-opts">';
   // عرض 4 حقول دائماً: الخيارات الموجودة + حقول فارغة للخيارات الناقصة
   for (var j = 0; j < 4; j++){
@@ -2759,43 +3052,117 @@ function formatOptionDisplay(s){
   var cleaned = String(s)
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n');
+    .replace(/\r/g, '\n')
+    .trim();
+
+  if (!cleaned) return '';
+
+  var isAccounting = /(?:من\s*حـ?\/|من\s*ح\/|من\s*مذكورين|إلى\s*حـ?\/|إلى\s*ح\/|الى\s*حـ?\/|الى\s*ح\/|إلى\s*مذكورين|الى\s*مذكورين)/i.test(cleaned);
+  var isTable = cleaned.includes('|') && cleaned.split('\n').some(function(l){ return l.trim().startsWith('|'); });
+  var isLedger = /(?:دفتر\s*الأستاذ|T-Account|حساب\s*الأستاذ|الجانب\s*المدين|الجانب\s*الدائن)/i.test(cleaned);
+  var isJournal = /(?:دفتر\s*اليومية)/i.test(cleaned);
+  var hasHtmlTags = /<(?:div|table|span|p|b|i|strong|em)\b[^>]*>/i.test(cleaned);
+
+  if (isAccounting || isTable || isLedger || isJournal || hasHtmlTags) {
+    try {
+      var formatted = formatQuestionContent(cleaned);
+      if (formatted && formatted.trim()) {
+        return formatted;
+      }
+    } catch(e) {
+      console.warn('formatOptionDisplay error:', e);
+    }
+  }
+
+  // إذا كان النص متعدد الأسطر
+  if (cleaned.includes('\n')) {
+    return escHtml(cleaned).replace(/\n/g, '<br>');
+  }
+
   return escHtml(cleaned);
 }
+window.formatOptionDisplay = formatOptionDisplay;
 
-function insertAccountingTemplate(targetIdx){
+function insertAccountingOptionTemplate(type, targetIdx){
   var activeEl = document.activeElement;
   var target = null;
-  if (activeEl && activeEl.classList && activeEl.classList.contains('ed-opt-textarea')){
+  if (activeEl && activeEl.classList && (activeEl.classList.contains('ed-opt-textarea') || activeEl.id.startsWith('aqyem-ed-opt-'))){
     target = activeEl;
   } else if (typeof targetIdx === 'number'){
-    target = document.getElementById('ed-opt-' + targetIdx);
+    target = document.getElementById('ed-opt-' + targetIdx) || document.getElementById('aqyem-ed-opt-' + targetIdx);
   } else {
     for (var j = 0; j < 4; j++){
-      var el = document.getElementById('ed-opt-' + j);
+      var el = document.getElementById('ed-opt-' + j) || document.getElementById('aqyem-ed-opt-' + j);
       if (el && !el.value.trim()){ target = el; break; }
     }
-    if (!target) target = document.getElementById('ed-opt-0');
+    if (!target) target = document.getElementById('ed-opt-0') || document.getElementById('aqyem-ed-opt-0');
   }
   if (!target) return;
 
-  var template = 'من حـ/ \nإلى حـ/ ';
+  var tpl = 'من حـ/ \nإلى حـ/ ';
+  if (type === 'simple') {
+    tpl = '1000 من حـ/ الصندوق\n1000 إلى حـ/ المبيعات';
+  } else if (type === 'compound_debit') {
+    tpl = 'من مذكورين:\n1200 حـ/ الصندوق\n800 حـ/ البنك\n2000 إلى حـ/ رأس المال';
+  } else if (type === 'compound_credit') {
+    tpl = '5000 من حـ/ المشتريات\nإلى مذكورين:\n3000 حـ/ الصندوق\n2000 حـ/ الموردون';
+  } else if (type === 'journal') {
+    tpl = '| مدين | دائن | البيان |\n|---|---|---|\n| 1000 | - | من حـ/ الصندوق |\n| - | 1000 | إلى حـ/ المبيعات |';
+  } else if (type === 'ledger') {
+    tpl = '[دفتر الأستاذ: حـ/ الصندوق]\n| منه (مدين) | البيان | له (دائن) | البيان |\n|---|---|---|---|\n| 5000 | إلى حـ/ المبيعات | 2000 | من حـ/ الإيجار |';
+  }
+
   if (!target.value.trim()){
-    target.value = template;
+    target.value = tpl;
   } else {
     var start = target.selectionStart || target.value.length;
     var end = target.selectionEnd || target.value.length;
-    target.value = target.value.substring(0, start) + (start > 0 && !target.value.endsWith('\n') ? '\n' : '') + template + target.value.substring(end);
+    target.value = target.value.substring(0, start) + (start > 0 && !target.value.endsWith('\n') ? '\n' : '') + tpl + target.value.substring(end);
   }
   target.focus();
-  var firstPos = target.value.indexOf('من حـ/ ') + 'من حـ/ '.length;
-  if (firstPos > -1 && target.setSelectionRange){
-    target.setSelectionRange(firstPos, firstPos);
-  }
-  toast('تم إدراج قالب القيد المحاسبي — يمكنك كتابة الحسابين بسطرين', 'ok');
+  toast('تم إدراج القالب المحاسبي في الخيار — يمكنك تعديل الحسابات والأرقام', 'ok');
+  updateEditorOptionsPreview();
+  updateAqyemOptsPreview();
+}
+window.insertAccountingOptionTemplate = insertAccountingOptionTemplate;
+
+function insertAccountingTemplate(targetIdx){
+  insertAccountingOptionTemplate('simple', targetIdx);
 }
 window.insertAccountingTemplate = insertAccountingTemplate;
-window.formatOptionDisplay = formatOptionDisplay;
+
+function toggleEditorOptionsPreview() {
+  var pBox = document.getElementById('ed-opts-preview');
+  var btn = document.getElementById('btn-toggle-opts-preview');
+  if (!pBox) return;
+  var isHidden = pBox.style.display === 'none' || !pBox.style.display;
+  pBox.style.display = isHidden ? 'block' : 'none';
+  if (btn) {
+    btn.innerHTML = isHidden ? '<i class="fas fa-eye-slash"></i> إخفاء معاينة الخيارات' : '<i class="fas fa-eye"></i> معاينة الخيارات';
+  }
+  if (isHidden) {
+    updateEditorOptionsPreview();
+  }
+}
+window.toggleEditorOptionsPreview = toggleEditorOptionsPreview;
+
+function updateEditorOptionsPreview() {
+  var pBox = document.getElementById('ed-opts-preview');
+  if (!pBox || pBox.style.display === 'none') return;
+  var html = '<div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:8px;"><i class="fas fa-magic" style="color:#0284c7;"></i> معاينة حية لشكل الخيارات والقيود والدفاتر كما ستظهر للطلبة:</div>';
+  html += '<div class="ed-opts-preview-grid" style="display:flex;flex-direction:column;gap:8px;">';
+  for (var i = 0; i < 4; i++) {
+    var optEl = document.getElementById('ed-opt-' + i);
+    var val = optEl ? optEl.value.trim() : '';
+    html += '<div style="display:flex;align-items:flex-start;gap:8px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;">' +
+      '<span style="font-weight:900;color:var(--pr);font-size:13px;min-width:20px;padding-top:4px;">' + LBL[i] + '</span>' +
+      '<div style="flex:1;">' + (val ? formatOptionDisplay(val) : '<span style="color:#94a3b8;font-style:italic;">(خيار فارغ)</span>') + '</div>' +
+    '</div>';
+  }
+  html += '</div>';
+  pBox.innerHTML = html;
+}
+window.updateEditorOptionsPreview = updateEditorOptionsPreview;
 
 // ══════════════════════════════════════════════
 //  توليد النماذج الثابتة
@@ -5283,13 +5650,28 @@ function openAqyemEditorEdit(qId) {
 
       // معطيات المسألة والجداول (اختياري)
       '<div style="margin-bottom:12px;">' +
-        '<label style="display:block;font-size:12.5px;font-weight:800;color:#334155;margin-bottom:4px;">معطيات المسألة أو جدول الحسابات (اختياري):</label>' +
-        '<textarea id="aqyem-ed-context" class="ed-textarea" style="width:100%;height:60px;font-size:13px;line-height:1.5;" placeholder="معطيات المسألة أو الجدول">' + esc(q.context || '') + '</textarea>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">' +
+          '<label style="font-size:12.5px;font-weight:800;color:#334155;margin:0;"><i class="fas fa-calculator"></i> معطيات المسألة أو جدول الحسابات (اختياري):</label>' +
+          '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-context\', \'simple\')"><i class="fas fa-balance-scale"></i> قيد</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-context\', \'journal\')"><i class="fas fa-book"></i> دفتر اليومية</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-context\', \'ledger\')"><i class="fas fa-columns"></i> دفتر الأستاذ</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#fdf2f8;color:#9d174d;border:1px solid #fbcfe8;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-context\', \'balances\')"><i class="fas fa-list-alt"></i> ميزان مراجعة</button>' +
+          '</div>' +
+        '</div>' +
+        '<textarea id="aqyem-ed-context" class="ed-textarea" style="width:100%;height:65px;font-size:13px;line-height:1.5;" placeholder="معطيات المسألة أو الجدول">' + esc(q.context || '') + '</textarea>' +
       '</div>' +
 
       // نص السؤال
       '<div style="margin-bottom:12px;">' +
-        '<label style="display:block;font-size:12.5px;font-weight:800;color:#334155;margin-bottom:4px;">نص السؤال المطلوب:</label>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">' +
+          '<label style="font-size:12.5px;font-weight:800;color:#334155;margin:0;"><i class="fas fa-question-circle"></i> نص السؤال المطلوب:</label>' +
+          '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-text\', \'simple\')"><i class="fas fa-balance-scale"></i> قيد</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-text\', \'journal\')"><i class="fas fa-book"></i> دفتر اليومية</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-text\', \'ledger\')"><i class="fas fa-columns"></i> دفتر الأستاذ</button>' +
+          '</div>' +
+        '</div>' +
         '<textarea id="aqyem-ed-text" class="ed-textarea" style="width:100%;height:80px;font-size:13.5px;line-height:1.6;" placeholder="اكتب نص السؤال المطلوب">' + esc(q.text || '') + '</textarea>' +
       '</div>' +
 
@@ -5354,6 +5736,33 @@ function updateAqyemAnsPreview() {
 }
 window.updateAqyemAnsPreview = updateAqyemAnsPreview;
 
+function toggleAqyemOptsPreview() {
+  var pBox = document.getElementById('aqyem-opts-preview');
+  if (!pBox) return;
+  var isHidden = pBox.style.display === 'none' || !pBox.style.display;
+  pBox.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) updateAqyemOptsPreview();
+}
+window.toggleAqyemOptsPreview = toggleAqyemOptsPreview;
+
+function updateAqyemOptsPreview() {
+  var pBox = document.getElementById('aqyem-opts-preview');
+  if (!pBox || pBox.style.display === 'none') return;
+  var html = '<div style="font-size:11.5px;font-weight:800;color:#334155;margin-bottom:6px;"><i class="fas fa-magic" style="color:#0284c7;"></i> معاينة حية لشكل خيارات أُقيّم تعلّمي المحاسبية:</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+  for (var i = 0; i < 4; i++) {
+    var optEl = document.getElementById('aqyem-ed-opt-' + i);
+    var val = optEl ? optEl.value.trim() : '';
+    html += '<div style="display:flex;align-items:flex-start;gap:8px;background:#ffffff;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;">' +
+      '<span style="font-weight:900;color:var(--pr);font-size:12px;min-width:18px;padding-top:2px;">' + (LBL[i] || (i + 1)) + '</span>' +
+      '<div style="flex:1;">' + (val ? formatOptionDisplay(val) : '<span style="color:#94a3b8;font-size:12px;font-style:italic;">(خيار فارغ)</span>') + '</div>' +
+    '</div>';
+  }
+  html += '</div>';
+  pBox.innerHTML = html;
+}
+window.updateAqyemOptsPreview = updateAqyemOptsPreview;
+
 function renderAqyemEditAnswerFields() {
   var wrap = document.getElementById('aqyem-ed-answer-wrap');
   var typeEl = document.getElementById('aqyem-ed-type');
@@ -5367,13 +5776,25 @@ function renderAqyemEditAnswerFields() {
     var opts = (q.type === 'mcq' && Array.isArray(q.options)) ? q.options : ['', '', '', ''];
     var correctIdx = (typeof q.correct === 'number') ? q.correct : 0;
 
-    html += '<label style="display:block;font-size:12.5px;font-weight:800;color:#334155;margin-bottom:6px;"><i class="fas fa-list-ul"></i> الخيارات الأربعة (حدد الإجابة الصحيحة):</label>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">' +
+      '<label style="font-size:12.5px;font-weight:800;color:#334155;margin:0;"><i class="fas fa-list-ul"></i> الخيارات الأربعة (حدد الإجابة الصحيحة):</label>' +
+      '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+        '<button type="button" class="btn" style="padding:3px 8px;font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:6px;" onclick="insertAccountingOptionTemplate(\'simple\')"><i class="fas fa-balance-scale"></i> + قيد بسيط</button>' +
+        '<button type="button" class="btn" style="padding:3px 8px;font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:6px;" onclick="insertAccountingOptionTemplate(\'compound_debit\')"><i class="fas fa-layer-group"></i> + من مذكورين</button>' +
+        '<button type="button" class="btn" style="padding:3px 8px;font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:6px;" onclick="insertAccountingOptionTemplate(\'compound_credit\')"><i class="fas fa-layer-group"></i> + إلى مذكورين</button>' +
+        '<button type="button" class="btn" style="padding:3px 8px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;" onclick="insertAccountingOptionTemplate(\'journal\')"><i class="fas fa-book"></i> + دفتر اليومية</button>' +
+        '<button type="button" class="btn" style="padding:3px 8px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;" onclick="insertAccountingOptionTemplate(\'ledger\')"><i class="fas fa-columns"></i> + دفتر الأستاذ</button>' +
+        '<button type="button" class="btn" style="padding:3px 8px;font-size:11px;background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:6px;" onclick="toggleAqyemOptsPreview()"><i class="fas fa-eye"></i> معاينة الخيارات</button>' +
+      '</div>' +
+    '</div>' +
+    '<div id="aqyem-opts-preview" style="display:none;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:8px;margin-bottom:8px;"></div>';
+
     for (var i = 0; i < 4; i++) {
       html +=
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-          '<input type="radio" name="aqyem-ed-correct-opt" value="' + i + '" ' + (correctIdx === i ? 'checked' : '') + ' style="width:18px;height:18px;cursor:pointer;" title="اختر هذا الخيار كإجابة صحيحة">' +
-          '<span style="font-weight:800;font-size:13px;color:var(--pr);width:22px;">' + (LBL[i] || (i + 1)) + '</span>' +
-          '<input type="text" id="aqyem-ed-opt-' + i + '" class="aqyem-search-input" style="flex:1;font-size:13px;" value="' + esc(opts[i] || '') + '" placeholder="نص الخيار ' + (LBL[i] || (i + 1)) + '">' +
+        '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;">' +
+          '<input type="radio" name="aqyem-ed-correct-opt" value="' + i + '" ' + (correctIdx === i ? 'checked' : '') + ' style="width:18px;height:18px;cursor:pointer;margin-top:6px;" title="اختر هذا الخيار كإجابة صحيحة">' +
+          '<span style="font-weight:800;font-size:13px;color:var(--pr);width:22px;margin-top:6px;">' + (LBL[i] || (i + 1)) + '</span>' +
+          '<textarea id="aqyem-ed-opt-' + i + '" class="aqyem-search-input ed-opt-textarea" rows="2" style="flex:1;font-size:13px;line-height:1.5;resize:vertical;" oninput="updateAqyemOptsPreview()" placeholder="نص أو قيد الخيار ' + (LBL[i] || (i + 1)) + ' — اضغط Enter للنزول سطراً">' + esc(opts[i] || '') + '</textarea>' +
         '</div>';
     }
   } else if (type === 'fill') {
@@ -5388,13 +5809,19 @@ function renderAqyemEditAnswerFields() {
         '<label style="font-size:12.5px;font-weight:800;color:#0f766e;margin:0;"><i class="fas fa-align-right"></i> الإجابة النموذجية والحل والقيود المحاسبية:</label>' +
         '<div style="display:flex;gap:5px;flex-wrap:wrap;">' +
           '<button type="button" class="btn" style="padding:4px 9px;font-size:11.5px;background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;border-radius:6px;" onclick="insertIntoAqyemTextAns(\'10000 من حـ/ الصندوق\\n10000 إلى حـ/ المبيعات\\n(إثبات بيع بضاعة نقداً)\')" title="إدراج نموذج قيد محاسبي مرتب">' +
-            '<i class="fas fa-calculator"></i> + قيد محاسبي' +
+            '<i class="fas fa-balance-scale"></i> + قيد بسيط' +
+          '</button>' +
+          '<button type="button" class="btn" style="padding:4px 9px;font-size:11.5px;background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;border-radius:6px;" onclick="insertIntoAqyemTextAns(\'من مذكورين:\\n1200 حـ/ الصندوق\\n800 حـ/ البنك\\n2000 إلى حـ/ رأس المال\')" title="إدراج قيد مركب">' +
+            '<i class="fas fa-layer-group"></i> + قيد مركب' +
+          '</button>' +
+          '<button type="button" class="btn" style="padding:4px 9px;font-size:11.5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;" onclick="insertIntoAqyemTextAns(\'| مدين | دائن | البيان | رقم القيد | التاريخ |\\n|---|---|---|---|---|\\n| 15000 | - | من حـ/ البنك | 1 | 2026/1/5م |\\n| - | 15000 | إلى حـ/ رأس المال | 1 | 2026/1/5م |\\n| (إيداع رأس المال في البنك) | | | | |\\n| 15000 | 15000 | المجموع | | |\')" title="إدراج دفتر اليومية">' +
+            '<i class="fas fa-book"></i> + دفتر اليومية' +
+          '</button>' +
+          '<button type="button" class="btn" style="padding:4px 9px;font-size:11.5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;" onclick="insertIntoAqyemTextAns(\'[دفتر الأستاذ: حـ/ الصندوق]\\n| منه (مدين) | البيان | له (دائن) | البيان |\\n|---|---|---|---|\\n| 5000 | إلى حـ/ المبيعات | 2000 | من حـ/ الإيجار |\\n| - | - | 3000 | رصيد مدين مرحل |\\n| 5000 | المجموع | 5000 | المجموع |\\n| 3000 | رصيد مدين منقول | - | - |\')" title="إدراج دفتر الأستاذ">' +
+            '<i class="fas fa-columns"></i> + دفتر الأستاذ (T)' +
           '</button>' +
           '<button type="button" class="btn" style="padding:4px 9px;font-size:11.5px;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px;" onclick="insertIntoAqyemTextAns(\'| البيان | مدين | دائن |\\n|---|---|---|\\n| حـ/ الصندوق | 5000 | - |\\n| حـ/ رأس المال | - | 5000 |\')" title="إدراج جدول">' +
             '<i class="fas fa-table"></i> + جدول' +
-          '</button>' +
-          '<button type="button" class="btn" style="padding:4px 9px;font-size:11.5px;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px;" onclick="insertIntoAqyemTextAns(\'![صورة توضيحية](https://example.com/image.png)\')" title="إدراج صورة">' +
-            '<i class="fas fa-image"></i> + صورة' +
           '</button>' +
         '</div>' +
       '</div>' +
@@ -5661,13 +6088,28 @@ function openAddAqyemQuestion(defaultUnitId, defaultLesson) {
 
       // معطيات المسألة والجداول (اختياري)
       '<div style="margin-bottom:12px;">' +
-        '<label style="display:block;font-size:12.5px;font-weight:800;color:#334155;margin-bottom:4px;">معطيات المسألة أو جدول الحسابات (اختياري):</label>' +
-        '<textarea id="aqyem-ed-context" class="ed-textarea" style="width:100%;height:60px;font-size:13px;line-height:1.5;" placeholder="معطيات المسألة أو الجدول"></textarea>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">' +
+          '<label style="font-size:12.5px;font-weight:800;color:#334155;margin:0;"><i class="fas fa-calculator"></i> معطيات المسألة أو جدول الحسابات (اختياري):</label>' +
+          '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-context\', \'simple\')"><i class="fas fa-balance-scale"></i> قيد</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-context\', \'journal\')"><i class="fas fa-book"></i> دفتر اليومية</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-context\', \'ledger\')"><i class="fas fa-columns"></i> دفتر الأستاذ</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#fdf2f8;color:#9d174d;border:1px solid #fbcfe8;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-context\', \'balances\')"><i class="fas fa-list-alt"></i> ميزان مراجعة</button>' +
+          '</div>' +
+        '</div>' +
+        '<textarea id="aqyem-ed-context" class="ed-textarea" style="width:100%;height:65px;font-size:13px;line-height:1.5;" placeholder="معطيات المسألة أو الجدول"></textarea>' +
       '</div>' +
 
       // نص السؤال
       '<div style="margin-bottom:12px;">' +
-        '<label style="display:block;font-size:12.5px;font-weight:800;color:#334155;margin-bottom:4px;">نص السؤال المطلوب:</label>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">' +
+          '<label style="font-size:12.5px;font-weight:800;color:#334155;margin:0;"><i class="fas fa-question-circle"></i> نص السؤال المطلوب:</label>' +
+          '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-text\', \'simple\')"><i class="fas fa-balance-scale"></i> قيد</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-text\', \'journal\')"><i class="fas fa-book"></i> دفتر اليومية</button>' +
+            '<button type="button" class="btn" style="padding:2px 7px;font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;" onclick="insertAccountingStructureTemplate(\'aqyem-ed-text\', \'ledger\')"><i class="fas fa-columns"></i> دفتر الأستاذ</button>' +
+          '</div>' +
+        '</div>' +
         '<textarea id="aqyem-ed-text" class="ed-textarea" style="width:100%;height:80px;font-size:13.5px;line-height:1.6;" placeholder="اكتب نص السؤال المطلوب هنا"></textarea>' +
       '</div>' +
 

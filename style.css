@@ -839,9 +839,118 @@ body.editor-on::before{display:none !important;}
 .ed-opt-accounting-bar{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
 .ed-opt-accounting-hint{font-size:11.5px;color:#166534;line-height:1.5;}
 .ed-opt-accounting-hint i{color:#15803d;margin-left:4px;}
-.ed-opt-accounting-btns{display:flex;gap:6px;}
+.ed-opt-accounting-btns{display:flex;gap:6px;flex-wrap:wrap;}
 .ed-tag-accounting{background:#15803d;color:#fff;border:1px solid #166534;border-radius:6px;padding:4px 9px;font-size:11.5px;font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;}
 .ed-tag-accounting:hover{background:#166534;color:#fff;}
+.ed-tag-accounting-blue{background:#0284c7;border-color:#0369a1;}
+.ed-tag-accounting-blue:hover{background:#0369a1;}
+.ed-tag-accounting-purple{background:#7c3aed;border-color:#6d28d9;}
+.ed-tag-accounting-purple:hover{background:#6d28d9;}
+.ed-opts-preview-box{background:#f8fafc;border:1.5px dashed #0284c7;border-radius:10px;padding:12px;margin-top:10px;}
+
+/* دعم القيود المحاسبية وجداول اليومية والأستاذ داخل خيارات الأسئلة والمراجعة */
+.qopt .accounting-entry-card,
+.ropt .accounting-entry-card,
+.aqyem-opt-content .accounting-entry-card,
+.aqyem-opt-text .accounting-entry-card,
+.ed-opts-preview-box .accounting-entry-card {
+  margin: 6px 0;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  font-size: 13.5px;
+  width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  pointer-events: auto;
+}
+.qopt:hover .accounting-entry-card {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+.qopt.exam-sel .accounting-entry-card {
+  background: #f0fdf4;
+  border-color: var(--pr);
+}
+.qopt.correct .accounting-entry-card {
+  background: #ffffff;
+  border-color: #16a34a;
+}
+.qopt.wrong .accounting-entry-card {
+  background: #ffffff;
+  border-color: #dc2626;
+}
+.qopt .entry-line,
+.ropt .entry-line,
+.aqyem-opt-content .entry-line,
+.aqyem-opt-text .entry-line,
+.ed-opts-preview-box .entry-line {
+  padding: 4px 8px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.qopt .entry-amount-badge,
+.ropt .entry-amount-badge,
+.aqyem-opt-content .entry-amount-badge,
+.aqyem-opt-text .entry-amount-badge,
+.ed-opts-preview-box .entry-amount-badge {
+  font-size: 11.5px;
+  padding: 2px 6px;
+}
+.qopt .entry-side-tag,
+.ropt .entry-side-tag,
+.aqyem-opt-content .entry-side-tag,
+.aqyem-opt-text .entry-side-tag,
+.ed-opts-preview-box .entry-side-tag {
+  font-size: 12.5px;
+}
+.qopt .entry-account-name,
+.ropt .entry-account-name,
+.aqyem-opt-content .entry-account-name,
+.aqyem-opt-text .entry-account-name,
+.ed-opts-preview-box .entry-account-name {
+  font-size: 13px;
+}
+.qopt .journal-book-container,
+.ropt .journal-book-container,
+.aqyem-opt-content .journal-book-container,
+.aqyem-opt-text .journal-book-container,
+.ed-opts-preview-box .journal-book-container,
+.qopt .ledger-table-wrap,
+.ropt .ledger-table-wrap,
+.aqyem-opt-content .ledger-table-wrap,
+.aqyem-opt-text .ledger-table-wrap,
+.ed-opts-preview-box .ledger-table-wrap {
+  margin: 6px 0;
+  max-width: 100%;
+  white-space: normal;
+  font-size: 12px;
+}
+.qopt .journal-book-table th,
+.qopt .journal-book-table td,
+.ropt .journal-book-table th,
+.ropt .journal-book-table td,
+.aqyem-opt-content .journal-book-table th,
+.aqyem-opt-content .journal-book-table td,
+.aqyem-opt-text .journal-book-table th,
+.aqyem-opt-text .journal-book-table td,
+.ed-opts-preview-box .journal-book-table th,
+.ed-opts-preview-box .journal-book-table td,
+.qopt .ledger-table th,
+.qopt .ledger-table td,
+.ropt .ledger-table th,
+.ropt .ledger-table td,
+.aqyem-opt-content .ledger-table th,
+.aqyem-opt-content .ledger-table td,
+.aqyem-opt-text .ledger-table th,
+.aqyem-opt-text .ledger-table td,
+.ed-opts-preview-box .ledger-table th,
+.ed-opts-preview-box .ledger-table td {
+  padding: 4px 6px;
+  font-size: 11.5px;
+}
 .ed-opt-row{display:flex;align-items:flex-start;gap:9px;}
 .ed-opt-row.ed-opt-empty .ed-opt-input{border-color:var(--gold);border-style:dashed;
   background:#fffdf3;}
