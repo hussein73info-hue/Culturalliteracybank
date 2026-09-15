@@ -36,82 +36,286 @@ var EDITOR_PASSWORD = 'hussein2024';
 // حالة وضع المحرر
 var editorMode = false;
 
-// فهرس سريع لكل سؤال في البنك برقمه id
-function buildBankIndex(){
+// ══════════════════════════════════════════════
+//  فصل بنوك الأسئلة: اختبار حسب الدرس vs اختبار حسب الوحدة والنماذج الوزارية
+// ══════════════════════════════════════════════
+
+// 1) البنك المستقل الخاص باختبار حسب الدرس
+var lessonBank = [];
+var lessonBankIndexById = {};
+
+// 2) البنك المستقل الخاص باختبار حسب الوحدة والنماذج الوزارية
+var unitMinisterialBank = [];
+var unitBankIndexById = {};
+
+// تصنيف الاختبار الجاري ('lesson' أو 'unit_ministerial')
+var currentQuizCategory = 'lesson';
+
+// حالة مزامنة Firebase السحابية لمنع التكرار
+var firestoreSyncInProgress = false;
+window.firestoreSyncInProgress = false;
+
+// نسخ عميق لكائن السؤال لحماية الأصل
+function cloneQuestion(q) {
+  if (!q) return null;
+  return {
+    id: q.id,
+    sem: q.sem,
+    unit: q.unit,
+    unitName: q.unitName || '',
+    lesson: q.lesson || '',
+    hint: (q.hint !== undefined && q.hint !== null) ? String(q.hint) : '',
+    text: q.text || '',
+    options: Array.isArray(q.options) ? q.options.slice() : [],
+    answer: typeof q.answer === 'number' ? q.answer : 0,
+    _examKey: q._examKey || '',
+    _model: q._model || '',
+    createdAt: q.createdAt || null
+  };
+}
+
+// بناء فهرس بحث سريع بالـ id
+function buildIndexedMap(arr) {
   var idx = {};
-  for (var i = 0; i < bank.length; i++) idx[bank[i].id] = i;
+  if (Array.isArray(arr)) {
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] && arr[i].id !== undefined) {
+        idx[arr[i].id] = i;
+      }
+    }
+  }
   return idx;
 }
-var bankIndexById = buildBankIndex();
 
-// حفظ التلميحات الأصلية من بنك الأسئلة الأساسي لضمان عدم فقدانها
+// فهرس سريع للتوافق العام القديم
+function buildBankIndex(){
+  return buildIndexedMap(currentQuizCategory === 'unit_ministerial' ? unitMinisterialBank : lessonBank);
+}
+var bankIndexById = {};
+
+// حفظ التلميحات الأصلية من بنك الأسئلة الأساسي
 var originalHintsById = {};
-bank.forEach(function(q){
-  if (q && q.id !== undefined && q.hint) {
-    originalHintsById[q.id] = q.hint;
-  }
-});
-
-// تطبيق أي تعديلات محفوظة محلياً على البنك
-function applyLocalOverrides(){
-  try {
-    var raw = localStorage.getItem('qbank_overrides');
-    if (!raw) return;
-    var overrides = JSON.parse(raw);
-    if (!overrides || typeof overrides !== 'object') return;
-    var applied = 0;
-    var overridesChanged = false;
-    Object.keys(overrides).forEach(function(idStr){
-      var idNum = parseInt(idStr, 10);
-      var idx = bankIndexById[idNum];
-      if (idx === undefined) return;
-      var ov = overrides[idStr];
-      if (ov.text !== undefined) bank[idx].text = ov.text;
-      if (Array.isArray(ov.options)) bank[idx].options = ov.options.slice();
-      if (typeof ov.answer === 'number') bank[idx].answer = ov.answer;
-      if (ov.lesson !== undefined) bank[idx].lesson = ov.lesson;
-      if (ov.hint !== undefined) {
-        if (ov.hint && ov.hint.trim()) {
-          bank[idx].hint = ov.hint;
-        } else if (!ov.hintDeleted && originalHintsById[idNum]) {
-          // استعادة التلميح الأصلي تلقائياً إذا كان التخزين المحلي فارغاً ولم يُحذف عمداً
-          bank[idx].hint = originalHintsById[idNum];
-          ov.hint = originalHintsById[idNum];
-          overridesChanged = true;
-        } else {
-          bank[idx].hint = '';
-        }
-      }
-      applied++;
-    });
-    if (overridesChanged) {
-      try { localStorage.setItem('qbank_overrides', JSON.stringify(overrides)); } catch(e){}
+if (typeof bank !== 'undefined' && Array.isArray(bank)) {
+  bank.forEach(function(q){
+    if (q && q.id !== undefined && q.hint) {
+      originalHintsById[q.id] = q.hint;
     }
-    if (applied > 0) console.log('[Editor] تم تطبيق ' + applied + ' تعديل محفوظ محلياً');
-  } catch(e){ console.warn('[Editor] فشل تطبيق التعديلات المحلية:', e); }
+  });
 }
 
-// حفظ تعديل سؤال في localStorage
-function saveOverride(questionId, patch){
-  var raw = localStorage.getItem('qbank_overrides');
-  var overrides = raw ? JSON.parse(raw) : {};
-  if (!overrides[questionId]) overrides[questionId] = {};
-  if (patch.text !== undefined) overrides[questionId].text = patch.text;
-  if (patch.options !== undefined) overrides[questionId].options = patch.options.slice();
-  if (patch.answer !== undefined) overrides[questionId].answer = patch.answer;
-  if (patch.lesson !== undefined) overrides[questionId].lesson = patch.lesson;
-  if (patch.hint !== undefined) {
-    overrides[questionId].hint = patch.hint;
-    overrides[questionId].hintDeleted = Boolean(patch.hintDeleted);
+// دالة تطبيق بيانات الكاش السحابي المخزنة محلياً
+function applyCachedCloudData() {
+  try {
+    var raw = localStorage.getItem('qbank_cached_cloud_payload');
+    if (!raw) return false;
+    var cached = JSON.parse(raw);
+    if (!cached || !cached.success) return false;
+
+    var changedLesson = false;
+    var changedUnit = false;
+
+    var lessonData = cached.lesson || { overrides: cached.overrides, additions: cached.additions, deletions: cached.deletions };
+    if (lessonData && lessonBank) {
+      changedLesson = applyCloudDatasetToBank(lessonBank, lessonData, 'lesson');
+      if (changedLesson) {
+        lessonBankIndexById = buildIndexedMap(lessonBank);
+      }
+    }
+
+    var unitMinData = cached.unitMinisterial;
+    if (unitMinData && unitMinisterialBank) {
+      changedUnit = applyCloudDatasetToBank(unitMinisterialBank, unitMinData, 'unit_ministerial');
+      if (changedUnit) {
+        unitBankIndexById = buildIndexedMap(unitMinisterialBank);
+      }
+    }
+
+    bankIndexById = (currentQuizCategory === 'unit_ministerial') ? unitBankIndexById : lessonBankIndexById;
+    return (changedLesson || changedUnit);
+  } catch (e) {
+    console.warn('[applyCachedCloudData warning]', e);
+    return false;
   }
-  localStorage.setItem('qbank_overrides', JSON.stringify(overrides));
+}
+window.applyCachedCloudData = applyCachedCloudData;
+
+// دالة تهيئة وبناء بنوك الأسئلة المنفصلة
+function initializeQuestionBanks() {
+  if (typeof bank === 'undefined' || !Array.isArray(bank)) return;
+
+  // أ) تطبيق التعديلات العامة السابقة (Legacy) على bank الأساسي أولاً
+  applyLegacyLocalModifications();
+
+  // ب) تفريغ ونسخ كائنات جديدة لكل بنك لمنع أي تداخل بالذاكرة
+  lessonBank = bank.map(cloneQuestion);
+  unitMinisterialBank = bank.map(cloneQuestion);
+
+  // ج) تطبيق البيانات السحابية المخزنة في الكاش المحلي (لضمان توفرها فوراً حتى بدون إنترنت أو عند 304)
+  applyCachedCloudData();
+
+  // د) تطبيق التعديلات والمحذوفات والإضافات المحلية الخاصة بأسئلة الدرس
+  applyCategoryLocalModifications('lesson');
+
+  // هـ) تطبيق التعديلات والمحذوفات والإضافات المحلية الخاصة بأسئلة الوحدة والنماذج الوزارية
+  applyCategoryLocalModifications('unit_ministerial');
+
+  lessonBankIndexById = buildIndexedMap(lessonBank);
+  unitBankIndexById = buildIndexedMap(unitMinisterialBank);
+
+  // و) مزامنة الفهرس العام
+  bankIndexById = (currentQuizCategory === 'unit_ministerial') ? unitBankIndexById : lessonBankIndexById;
+}
+window.initializeQuestionBanks = initializeQuestionBanks;
+
+// تطبيق التعديلات السابقة (Legacy)
+function applyLegacyLocalModifications() {
+  try {
+    // 1. المحذوفات السابقة
+    var rawDel = localStorage.getItem('qbank_deletions');
+    if (rawDel) {
+      var delIds = JSON.parse(rawDel);
+      if (Array.isArray(delIds)) {
+        delIds.forEach(function(dId) {
+          var bIdx = bank.findIndex(function(item){ return item.id === dId; });
+          if (bIdx !== -1) bank.splice(bIdx, 1);
+          if (lessonBank && lessonBank.length) {
+            var lIdx = lessonBank.findIndex(function(item){ return item.id === dId; });
+            if (lIdx !== -1) lessonBank.splice(lIdx, 1);
+          }
+        });
+      }
+    }
+    // 2. الإضافات السابقة
+    var rawAdd = localStorage.getItem('qbank_additions');
+    if (rawAdd) {
+      var additions = JSON.parse(rawAdd);
+      if (Array.isArray(additions)) {
+        additions.forEach(function(q) {
+          if (!bank.some(function(item){ return item.id === q.id; })) {
+            bank.push(cloneQuestion(q));
+          }
+          if (lessonBank && lessonBank.length && !lessonBank.some(function(item){ return item.id === q.id; })) {
+            lessonBank.push(cloneQuestion(q));
+          }
+        });
+      }
+    }
+    // 3. التعديلات السابقة
+    var rawOv = localStorage.getItem('qbank_overrides');
+    if (rawOv) {
+      var ovs = JSON.parse(rawOv);
+      if (ovs && typeof ovs === 'object') {
+        Object.keys(ovs).forEach(function(idStr) {
+          var idNum = parseInt(idStr, 10);
+          var patch = ovs[idStr];
+          var q = bank.find(function(item){ return item.id === idNum; });
+          if (q) {
+            if (patch.text !== undefined) q.text = patch.text;
+            if (Array.isArray(patch.options)) q.options = patch.options.slice();
+            if (typeof patch.answer === 'number') q.answer = patch.answer;
+            if (patch.lesson !== undefined) q.lesson = patch.lesson;
+            if (patch.hint !== undefined) q.hint = patch.hint;
+          }
+          if (lessonBank && lessonBank.length) {
+            var lq = lessonBank.find(function(item){ return item.id === idNum; });
+            if (lq) {
+              if (patch.text !== undefined) lq.text = patch.text;
+              if (Array.isArray(patch.options)) lq.options = patch.options.slice();
+              if (typeof patch.answer === 'number') lq.answer = patch.answer;
+              if (patch.lesson !== undefined) lq.lesson = patch.lesson;
+              if (patch.hint !== undefined) lq.hint = patch.hint;
+            }
+          }
+        });
+      }
+    }
+  } catch(e) {
+    console.warn('[Legacy Mod Warning]', e);
+  }
 }
 
-// ══════════════════════════════════════════════
-//  مزامنة قاعدة بيانات Firebase Firestore السحابية
-// ══════════════════════════════════════════════
+// تطبيق التعديلات الخاصة بقسم معين
+function applyCategoryLocalModifications(category) {
+  var isUnit = (category === 'unit_ministerial' || category === 'unit');
+  var targetBank = isUnit ? unitMinisterialBank : lessonBank;
+  var prefix = isUnit ? 'qbank_unit_ministerial_' : 'qbank_lesson_';
 
-var firestoreSyncInProgress = false;
+  try {
+    // 1) المحذوفات
+    var rawDel = localStorage.getItem(prefix + 'deletions');
+    if (rawDel) {
+      var delIds = JSON.parse(rawDel);
+      if (Array.isArray(delIds)) {
+        delIds.forEach(function(dId) {
+          var idx = targetBank.findIndex(function(item){ return item.id === dId; });
+          if (idx !== -1) targetBank.splice(idx, 1);
+        });
+      }
+    }
+
+    // 2) الإضافات
+    var rawAdd = localStorage.getItem(prefix + 'additions');
+    if (rawAdd) {
+      var additions = JSON.parse(rawAdd);
+      if (Array.isArray(additions)) {
+        additions.forEach(function(newQ) {
+          if (!targetBank.some(function(item){ return item.id === newQ.id; })) {
+            targetBank.push(cloneQuestion(newQ));
+          }
+        });
+      }
+    }
+
+    // 3) التعديلات
+    var rawOv = localStorage.getItem(prefix + 'overrides');
+    if (rawOv) {
+      var ovs = JSON.parse(rawOv);
+      if (ovs && typeof ovs === 'object') {
+        Object.keys(ovs).forEach(function(idStr) {
+          var idNum = parseInt(idStr, 10);
+          var patch = ovs[idStr];
+          var q = targetBank.find(function(item){ return item.id === idNum; });
+          if (q) {
+            if (patch.text !== undefined) q.text = patch.text;
+            if (Array.isArray(patch.options)) q.options = patch.options.slice();
+            if (typeof patch.answer === 'number') q.answer = patch.answer;
+            if (patch.lesson !== undefined) q.lesson = patch.lesson;
+            if (patch.hint !== undefined) q.hint = patch.hint;
+          }
+        });
+      }
+    }
+
+    // إعادة بناء الفهرس
+    if (isUnit) {
+      unitBankIndexById = buildIndexedMap(unitMinisterialBank);
+    } else {
+      lessonBankIndexById = buildIndexedMap(lessonBank);
+    }
+  } catch(e) {
+    console.warn('[Category Mod Warning for ' + category + ']', e);
+  }
+}
+
+// حفظ تعديل سؤال في localStorage حسب القسم المحدد
+function saveOverride(questionId, patch, category){
+  var cat = (category === 'unit_ministerial' || category === 'unit') ? 'unit_ministerial' : 'lesson';
+  var key = (cat === 'unit_ministerial') ? 'qbank_unit_ministerial_overrides' : 'qbank_lesson_overrides';
+  try {
+    var raw = localStorage.getItem(key);
+    var overrides = raw ? JSON.parse(raw) : {};
+    if (!overrides[questionId]) overrides[questionId] = {};
+    if (patch.text !== undefined) overrides[questionId].text = patch.text;
+    if (patch.options !== undefined) overrides[questionId].options = patch.options.slice();
+    if (patch.answer !== undefined) overrides[questionId].answer = patch.answer;
+    if (patch.lesson !== undefined) overrides[questionId].lesson = patch.lesson;
+    if (patch.hint !== undefined) {
+      overrides[questionId].hint = patch.hint;
+      overrides[questionId].hintDeleted = Boolean(patch.hintDeleted);
+    }
+    localStorage.setItem(key, JSON.stringify(overrides));
+  } catch(e){}
+}
 
 // تحديث شارة الاتصال السحابي في الواجهة
 function updateCloudBadge(state){
@@ -134,9 +338,10 @@ function updateCloudBadge(state){
   });
 }
 
-// إرسال تعديل سؤال إلى خادم Firebase Firestore (محمي بصلاحيات المشرف)
-async function syncOverrideToCloud(questionId, patch){
+// إرسال تعديل سؤال إلى خادم Firebase Firestore حسب القسم المحدد
+async function syncOverrideToCloud(questionId, patch, category){
   updateCloudBadge('saving');
+  var cat = (category === 'unit_ministerial' || category === 'unit') ? 'unit_ministerial' : 'lesson';
   try {
     var res = await fetch('/api/questions/override', {
       method: 'POST',
@@ -146,6 +351,7 @@ async function syncOverrideToCloud(questionId, patch){
       },
       body: JSON.stringify({
         questionId: questionId,
+        category: cat,
         text: patch.text,
         options: patch.options,
         answer: patch.answer,
@@ -158,24 +364,24 @@ async function syncOverrideToCloud(questionId, patch){
     var data = await res.json();
     if (data.success){
       updateCloudBadge('synced');
-      toast('☁️ تم حفظ التعديل ومزامنته سحابياً في Firebase Firestore بنجاح!', 'ok');
+      var catLbl = (cat === 'unit_ministerial') ? 'اختبار حسب الوحدة والنماذج الوزارية' : 'اختبار حسب الدرس';
+      toast('☁️ تم حفظ التعديل في بنك (' + catLbl + ') ومزامنته سحابياً في Firebase بنجاح!', 'ok');
     } else {
       updateCloudBadge('error');
-      console.warn('[Firebase Firestore] فشل الحفظ السحابي:', data.error);
       toast('⚠️ تم الحفظ محلياً (تعذر الاتصال بالسحابة: ' + (data.error || '') + ')', 'err');
     }
   } catch (err){
     updateCloudBadge('error');
-    console.warn('[Firebase Firestore] خطأ اتصال:', err);
     toast('⚠️ تم الحفظ محلياً (حدث خطأ في شبكة السحابة)', 'err');
   }
 }
 
-// إرسال سؤال جديد إلى خادم Firebase Firestore (محمي بصلاحيات المشرف)
-async function syncAddQuestionToCloud(newQ){
+// إرسال سؤال جديد إلى خادم Firebase Firestore حسب القسم المحدد
+async function syncAddQuestionToCloud(newQ, category){
   updateCloudBadge('saving');
+  var cat = category || 'lesson';
   try {
-    var payload = Object.assign({}, newQ, { adminKey: EDITOR_PASSWORD });
+    var payload = Object.assign({}, newQ, { category: cat, adminKey: EDITOR_PASSWORD });
     var res = await fetch('/api/questions/add', {
       method: 'POST',
       headers: {
@@ -187,7 +393,8 @@ async function syncAddQuestionToCloud(newQ){
     var data = await res.json();
     if (data.success){
       updateCloudBadge('synced');
-      toast('☁️ تمت إضافة السؤال ومزامنته في Firebase Firestore بنجاح!', 'ok');
+      var catLbl = (cat === 'both') ? 'كلا القسمين' : (cat === 'unit_ministerial' ? 'اختبار حسب الوحدة والنماذج الوزارية' : 'اختبار حسب الدرس');
+      toast('☁️ تمت إضافة السؤال في بنك (' + catLbl + ') ومزامنته في Firebase بنجاح!', 'ok');
     } else {
       updateCloudBadge('error');
       toast('⚠️ تمت الإضافة محلياً (تعذر الحفظ في Firebase)', 'err');
@@ -198,9 +405,10 @@ async function syncAddQuestionToCloud(newQ){
   }
 }
 
-// إرسال حذف سؤال إلى خادم Firebase Firestore (محمي بصلاحيات المشرف)
-async function syncDeleteToCloud(questionId){
+// إرسال حذف سؤال إلى خادم Firebase Firestore حسب القسم المحدد
+async function syncDeleteToCloud(questionId, category){
   updateCloudBadge('saving');
+  var cat = (category === 'unit_ministerial' || category === 'unit') ? 'unit_ministerial' : 'lesson';
   try {
     var res = await fetch('/api/questions/delete', {
       method: 'POST',
@@ -208,7 +416,7 @@ async function syncDeleteToCloud(questionId){
         'Content-Type': 'application/json',
         'x-admin-key': EDITOR_PASSWORD
       },
-      body: JSON.stringify({ questionId: questionId, adminKey: EDITOR_PASSWORD })
+      body: JSON.stringify({ questionId: questionId, category: cat, adminKey: EDITOR_PASSWORD })
     });
     var data = await res.json();
     if (data && data.success){
@@ -225,9 +433,119 @@ async function syncDeleteToCloud(questionId){
   }
 }
 
-// جلب وتطبيق كافة التعديلات والمحذوفات والإضافات من Firebase Firestore
+// دالة مساعدة لتطبيق بيانات السحابة على بنك محدد
+function applyCloudDatasetToBank(targetBank, cloudData, category) {
+  if (!cloudData || !Array.isArray(targetBank)) return false;
+  var changed = false;
+  var prefix = (category === 'unit_ministerial') ? 'qbank_unit_ministerial_' : 'qbank_lesson_';
+
+  // 1) المحذوفات
+  if (Array.isArray(cloudData.deletions) && cloudData.deletions.length > 0) {
+    var rawDel = localStorage.getItem(prefix + 'deletions');
+    var localDel = rawDel ? JSON.parse(rawDel) : [];
+    if (!Array.isArray(localDel)) localDel = [];
+
+    cloudData.deletions.forEach(function(delId) {
+      if (localDel.indexOf(delId) === -1) localDel.push(delId);
+      var idx = targetBank.findIndex(function(item){ return item.id === delId; });
+      if (idx !== -1) {
+        targetBank.splice(idx, 1);
+        changed = true;
+      }
+      if (category === 'lesson' && Array.isArray(bank)) {
+        var bIdx = bank.findIndex(function(item){ return item.id === delId; });
+        if (bIdx !== -1) bank.splice(bIdx, 1);
+      }
+    });
+    try { localStorage.setItem(prefix + 'deletions', JSON.stringify(localDel)); } catch(e){}
+  }
+
+  // 2) الإضافات
+  if (Array.isArray(cloudData.additions) && cloudData.additions.length > 0) {
+    var rawAdd = localStorage.getItem(prefix + 'additions');
+    var localAdd = rawAdd ? JSON.parse(rawAdd) : [];
+    if (!Array.isArray(localAdd)) localAdd = [];
+
+    cloudData.additions.forEach(function(newQ) {
+      var existingIdx = targetBank.findIndex(function(item){ return item.id === newQ.id; });
+      if (existingIdx === -1) {
+        targetBank.push(cloneQuestion(newQ));
+        localAdd.push(newQ);
+        changed = true;
+      } else {
+        Object.assign(targetBank[existingIdx], cloneQuestion(newQ));
+      }
+      if (category === 'lesson' && Array.isArray(bank)) {
+        var bIdx = bank.findIndex(function(item){ return item.id === newQ.id; });
+        if (bIdx === -1) {
+          bank.push(cloneQuestion(newQ));
+        } else {
+          Object.assign(bank[bIdx], cloneQuestion(newQ));
+        }
+      }
+    });
+    try { localStorage.setItem(prefix + 'additions', JSON.stringify(localAdd)); } catch(e){}
+  }
+
+  // 3) التعديلات
+  if (cloudData.overrides && typeof cloudData.overrides === 'object') {
+    var rawOv = localStorage.getItem(prefix + 'overrides');
+    var localOv = rawOv ? JSON.parse(rawOv) : {};
+
+    Object.keys(cloudData.overrides).forEach(function(idStr) {
+      var qId = parseInt(idStr, 10);
+      var patch = cloudData.overrides[idStr];
+      var targetQ = targetBank.find(function(item){ return item.id === qId; });
+      if (targetQ) {
+        if (patch.text !== undefined && targetQ.text !== patch.text) {
+          targetQ.text = patch.text;
+          changed = true;
+        }
+        if (Array.isArray(patch.options)) {
+          targetQ.options = patch.options.slice();
+          changed = true;
+        }
+        if (typeof patch.answer === 'number' && targetQ.answer !== patch.answer) {
+          targetQ.answer = patch.answer;
+          changed = true;
+        }
+        if (patch.lesson !== undefined && targetQ.lesson !== patch.lesson) {
+          targetQ.lesson = patch.lesson;
+          changed = true;
+        }
+        if (patch.hint !== undefined && targetQ.hint !== patch.hint) {
+          targetQ.hint = patch.hint;
+          changed = true;
+        }
+        if (patch.hintDeleted) {
+          targetQ.hint = '';
+          changed = true;
+        }
+        localOv[qId] = patch;
+      }
+      if (category === 'lesson' && Array.isArray(bank)) {
+        var bQ = bank.find(function(item){ return item.id === qId; });
+        if (bQ) {
+          if (patch.text !== undefined) bQ.text = patch.text;
+          if (Array.isArray(patch.options)) bQ.options = patch.options.slice();
+          if (typeof patch.answer === 'number') bQ.answer = patch.answer;
+          if (patch.lesson !== undefined) bQ.lesson = patch.lesson;
+          if (patch.hint !== undefined) bQ.hint = patch.hint;
+          if (patch.hintDeleted) bQ.hint = '';
+        }
+      }
+    });
+    try { localStorage.setItem(prefix + 'overrides', JSON.stringify(localOv)); } catch(e){}
+  }
+
+  return changed;
+}
+
+// جلب وتطبيق كافة التعديلات والمحذوفات والإضافات من Firebase Firestore لكلا البنكين
 async function syncFromFirestore(silent){
-  if (firestoreSyncInProgress) return;
+  if (typeof window !== 'undefined' && window.firestoreSyncInProgress) return;
+  if (typeof firestoreSyncInProgress !== 'undefined' && firestoreSyncInProgress) return;
+  if (typeof window !== 'undefined') window.firestoreSyncInProgress = true;
   firestoreSyncInProgress = true;
   updateCloudBadge('syncing');
 
@@ -240,10 +558,15 @@ async function syncFromFirestore(silent){
 
     var res = await fetch('/api/questions/sync', { headers: headers });
 
-    // إذا لم تتغير البيانات في السحابة، استجب فوراً دون استهلاك أي موارد
     if (res.status === 304) {
+      // رد 304 يعني تطابق السحابة — تأكد من تطبيق الكاش السحابي على الذاكرة
+      var changedCached = applyCachedCloudData();
       updateCloudBadge('synced');
+      if (typeof window !== 'undefined') window.firestoreSyncInProgress = false;
       firestoreSyncInProgress = false;
+      if (changedCached && typeof refreshCurrentPage === 'function') {
+        refreshCurrentPage();
+      }
       return;
     }
 
@@ -255,90 +578,36 @@ async function syncFromFirestore(silent){
     var data = await res.json();
 
     if (data.success){
-      var changed = false;
+      try {
+        localStorage.setItem('qbank_cached_cloud_payload', JSON.stringify(data));
+      } catch(e) {}
 
-      // 1) تطبيق المحذوفات من السحابة
-      if (Array.isArray(data.deletions) && data.deletions.length > 0){
-        var rawDel = localStorage.getItem('qbank_deletions');
-        var localDel = rawDel ? JSON.parse(rawDel) : [];
-        if (!Array.isArray(localDel)) localDel = [];
+      var changedLesson = false;
+      var changedUnit = false;
 
-        data.deletions.forEach(function(delId){
-          if (localDel.indexOf(delId) === -1) localDel.push(delId);
-          var idx = bankIndexById[delId];
-          if (idx !== undefined){
-            bank.splice(idx, 1);
-            bankIndexById = buildBankIndex();
-            changed = true;
-          }
-        });
-        localStorage.setItem('qbank_deletions', JSON.stringify(localDel));
+      // أ) تطبيق أسئلة الدروس (Lesson Bank)
+      var lessonData = data.lesson || { overrides: data.overrides, additions: data.additions, deletions: data.deletions };
+      if (lessonData) {
+        changedLesson = applyCloudDatasetToBank(lessonBank, lessonData, 'lesson');
+        if (changedLesson) {
+          lessonBankIndexById = buildIndexedMap(lessonBank);
+        }
       }
 
-      // 2) تطبيق الإضافات من السحابة
-      if (Array.isArray(data.additions) && data.additions.length > 0){
-        var rawAdd = localStorage.getItem('qbank_additions');
-        var localAdd = rawAdd ? JSON.parse(rawAdd) : [];
-        if (!Array.isArray(localAdd)) localAdd = [];
-
-        data.additions.forEach(function(cloudQ){
-          var existingIdx = bankIndexById[cloudQ.id];
-          if (existingIdx === undefined){
-            bank.push(cloudQ);
-            bankIndexById[cloudQ.id] = bank.length - 1;
-            localAdd.push(cloudQ);
-            changed = true;
-          }
-        });
-        localStorage.setItem('qbank_additions', JSON.stringify(localAdd));
+      // ب) تطبيق أسئلة الوحدة والنماذج الوزارية (Unit & Ministerial Bank)
+      var unitMinData = data.unitMinisterial;
+      if (unitMinData) {
+        changedUnit = applyCloudDatasetToBank(unitMinisterialBank, unitMinData, 'unit_ministerial');
+        if (changedUnit) {
+          unitBankIndexById = buildIndexedMap(unitMinisterialBank);
+        }
       }
 
-      // 3) تطبيق التعديلات (Overrides) من السحابة
-      if (data.overrides && typeof data.overrides === 'object'){
-        var rawOv = localStorage.getItem('qbank_overrides');
-        var localOv = rawOv ? JSON.parse(rawOv) : {};
-
-        Object.keys(data.overrides).forEach(function(idStr){
-          var qId = parseInt(idStr, 10);
-          var patch = data.overrides[idStr];
-          var idx = bankIndexById[qId];
-          if (idx !== undefined){
-            if (patch.text !== undefined && bank[idx].text !== patch.text){
-              bank[idx].text = patch.text;
-              changed = true;
-            }
-            if (Array.isArray(patch.options)){
-              bank[idx].options = patch.options.slice();
-              changed = true;
-            }
-            if (typeof patch.answer === 'number' && bank[idx].answer !== patch.answer){
-              bank[idx].answer = patch.answer;
-              changed = true;
-            }
-            if (patch.lesson !== undefined){
-              bank[idx].lesson = patch.lesson;
-              changed = true;
-            }
-            if (patch.hint !== undefined){
-              var resolvedHint = patch.hint;
-              if ((!resolvedHint || !resolvedHint.trim()) && !patch.hintDeleted && originalHintsById[qId]){
-                resolvedHint = originalHintsById[qId];
-              }
-              if (bank[idx].hint !== resolvedHint){
-                bank[idx].hint = resolvedHint;
-                changed = true;
-              }
-              patch.hint = resolvedHint;
-            }
-            localOv[qId] = patch;
-          }
-        });
-        localStorage.setItem('qbank_overrides', JSON.stringify(localOv));
-      }
+      bankIndexById = (currentQuizCategory === 'unit_ministerial') ? unitBankIndexById : lessonBankIndexById;
 
       updateCloudBadge('synced');
-      if (changed){
-        if (!silent) toast('☁️ تم تحديث الأسئلة تلقائياً من Firebase Firestore', 'ok');
+      if (changedLesson || changedUnit){
+        if (!silent) toast('☁️ تم تحديث ومزامنة بنوك الأسئلة تلقائياً من Firebase Firestore', 'ok');
         refreshCurrentPage();
       }
     } else {
@@ -348,55 +617,50 @@ async function syncFromFirestore(silent){
     console.warn('[Firestore Sync Error]', err);
     updateCloudBadge('offline');
   } finally {
+    if (typeof window !== 'undefined') window.firestoreSyncInProgress = false;
     firestoreSyncInProgress = false;
   }
 }
 
-// حذف كل التعديلات المحفوظة (reset)
+// حذف كل التعديلات المحفوظة محلياً (reset)
 function clearAllOverrides(){
-  localStorage.removeItem('qbank_overrides');
-  localStorage.removeItem('qbank_additions');
-  localStorage.removeItem('qbank_deletions');
+  ['qbank_overrides', 'qbank_additions', 'qbank_deletions',
+   'qbank_lesson_overrides', 'qbank_lesson_additions', 'qbank_lesson_deletions',
+   'qbank_unit_ministerial_overrides', 'qbank_unit_ministerial_additions', 'qbank_unit_ministerial_deletions'
+  ].forEach(function(k){ try { localStorage.removeItem(k); } catch(e){} });
 }
 
-// ══════════════════════════════════════════════
-//  حذف الأسئلة (Delete Questions)
-// ══════════════════════════════════════════════
-
-// تطبيق قائمة المحذوفات المحفوظة محلياً على البنك
-function applyLocalDeletions(){
-  try {
-    var raw = localStorage.getItem('qbank_deletions');
-    if (!raw) return;
-    var deletions = JSON.parse(raw);
-    if (!Array.isArray(deletions)) return;
-    var removed = 0;
-    // إزالة الأسئلة المحذوفة من البنك
-    for (var i = bank.length - 1; i >= 0; i--){
-      if (deletions.indexOf(bank[i].id) !== -1){
-        bank.splice(i, 1);
-        removed++;
-      }
-    }
-    // إعادة بناء الفهرس
-    bankIndexById = buildBankIndex();
-    if (removed > 0) console.log('[Editor] تم تطبيق ' + removed + ' حذف محفوظ محلياً');
-  } catch(e){ console.warn('[Editor] فشل تطبيق المحذوفات المحلية:', e); }
-}
+// دوال التوافق
+function applyLocalDeletions(){ initializeQuestionBanks(); }
+function applyLocalAdditions(){ initializeQuestionBanks(); }
+function applyLocalOverrides(){ initializeQuestionBanks(); }
 
 // ══════════════════════════════════════════════
 //  حذف الأسئلة وتأكيد الحذف من البرنامج و Firebase
 // ══════════════════════════════════════════════
 var questionToDeleteId = null;
+var questionToDeleteCategory = 'unit_ministerial';
 
 // فتح نافذة تأكيد حذف السؤال نهائياً من البرنامج و Firebase
-function confirmDeleteQuestion(questionId){
+function confirmDeleteQuestion(questionId, explicitCategory){
   if (!editorMode) return;
-  var q = null;
-  var idx = bankIndexById[questionId];
-  if (idx !== undefined){
-    q = bank[idx];
-  } else if (Array.isArray(currentQuiz)){
+
+  var targetCat = explicitCategory || (currentQuizCategory || 'unit_ministerial');
+  var targetBank = (targetCat === 'unit_ministerial') ? unitMinisterialBank : lessonBank;
+  var q = targetBank.find(function(item){ return item.id === questionId; });
+
+  // فحص احتياطي إذا لم يوجد بالبنك المحدد
+  if (!q) {
+    if (targetCat === 'unit_ministerial') {
+      q = lessonBank.find(function(item){ return item.id === questionId; });
+      if (q) targetCat = 'lesson';
+    } else {
+      q = unitMinisterialBank.find(function(item){ return item.id === questionId; });
+      if (q) targetCat = 'unit_ministerial';
+    }
+  }
+
+  if (!q && Array.isArray(currentQuiz)){
     q = currentQuiz.find(function(item){ return item.id === questionId; });
   }
 
@@ -406,11 +670,24 @@ function confirmDeleteQuestion(questionId){
   }
 
   questionToDeleteId = questionId;
+  questionToDeleteCategory = targetCat;
+
+  var catTitle = (targetCat === 'unit_ministerial')
+    ? 'بنك اختبار حسب الوحدة والنماذج الوزارية'
+    : 'بنك اختبار حسب الدرس';
+
+  var isolationNotice = (targetCat === 'unit_ministerial')
+    ? 'لن يؤثر إطلاقاً على أسئلة اختبار حسب الدرس (محفوظة بالكامل)'
+    : 'لن يؤثر إطلاقاً على أسئلة اختبار حسب الوحدة والنماذج الوزارية (محفوظة بالكامل)';
 
   // ملء تفاصيل السؤال في نافذة التأكيد
   var infoEl = document.getElementById('delete-confirm-question-info');
   if (infoEl){
     infoEl.innerHTML =
+      '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#1e40af;font-weight:700;">' +
+        '<i class="fas fa-info-circle"></i> الحذف من: <strong>' + catTitle + '</strong><br>' +
+        '<span style="font-size:11px;color:#059669;"><i class="fas fa-shield-alt"></i> ' + isolationNotice + '</span>' +
+      '</div>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px;font-weight:800;color:#1e293b;">' +
         '<span><i class="fas fa-hashtag" style="color:#e74c3c;"></i> رقم السؤال: <span style="color:#e74c3c;font-size:13px;">#' + q.id + '</span></span>' +
         (q.lesson ? '<span style="color:#475569;font-weight:600;"><i class="fas fa-book-open" style="color:#3b82f6;"></i> ' + escHtml(q.lesson) + '</span>' : '') +
@@ -424,7 +701,7 @@ function confirmDeleteQuestion(questionId){
   var btnAction = document.getElementById('btn-confirm-delete-action');
   if (btnAction){
     btnAction.disabled = false;
-    btnAction.innerHTML = '<i class="fas fa-trash-alt"></i> نعم، حذف من البرنامج و Firebase';
+    btnAction.innerHTML = '<i class="fas fa-trash-alt"></i> نعم، حذف من هذا البنك ومزامنته سحابياً';
   }
 
   // إظهار نافذة تأكيد الحذف
@@ -441,11 +718,11 @@ function closeDeleteConfirmModal(e){
 }
 window.closeDeleteConfirmModal = closeDeleteConfirmModal;
 
-// تنفيذ عملية الحذف الفعلية من البرنامج و Firebase
+// تنفيذ عملية الحذف الفعلية من القسم المختار ومزامنته مع Firebase
 async function executeDeleteQuestionAction(){
   if (!editorMode || !questionToDeleteId) return;
   var qId = questionToDeleteId;
-  var idx = bankIndexById[qId];
+  var cat = questionToDeleteCategory || 'unit_ministerial';
 
   var btnAction = document.getElementById('btn-confirm-delete-action');
   if (btnAction){
@@ -453,13 +730,22 @@ async function executeDeleteQuestionAction(){
     btnAction.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحذف والمزامنة مع Firebase...';
   }
 
-  // 1) إزالة السؤال من بنك الأسئلة في الذاكرة
-  if (idx !== undefined){
-    bank.splice(idx, 1);
-    bankIndexById = buildBankIndex();
+  // 1) إزالة السؤال من بنك الأسئلة المختار فقط دون المساس بالبنك الآخر
+  if (cat === 'unit_ministerial') {
+    var uIdx = unitMinisterialBank.findIndex(function(item){ return item.id === qId; });
+    if (uIdx !== -1) {
+      unitMinisterialBank.splice(uIdx, 1);
+      unitBankIndexById = buildIndexedMap(unitMinisterialBank);
+    }
+  } else {
+    var lIdx = lessonBank.findIndex(function(item){ return item.id === qId; });
+    if (lIdx !== -1) {
+      lessonBank.splice(lIdx, 1);
+      lessonBankIndexById = buildIndexedMap(lessonBank);
+    }
   }
 
-  // 2) إزالة السؤال من الاختبار الجاري فوراً إذا كان مفتوحاً مع المحافظة على إجابات باقي الأسئلة
+  // 2) إزالة السؤال من الاختبار الجاري فوراً إذا كان مفتوحاً
   if (Array.isArray(currentQuiz) && currentQuiz.length > 0){
     var answersByQId = {};
     currentQuiz.forEach(function(item, i){
@@ -479,21 +765,22 @@ async function executeDeleteQuestionAction(){
     userAnswers = newUserAnswers;
   }
 
-  // 3) حفظ في قائمة المحذوفات محلياً
+  // 3) حفظ في قائمة المحذوفات محلياً الخاصة بهذا البنك
+  var prefix = (cat === 'unit_ministerial') ? 'qbank_unit_ministerial_' : 'qbank_lesson_';
   try {
-    var raw = localStorage.getItem('qbank_deletions');
+    var raw = localStorage.getItem(prefix + 'deletions');
     var deletions = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(deletions)) deletions = [];
     if (deletions.indexOf(qId) === -1){
       deletions.push(qId);
-      localStorage.setItem('qbank_deletions', JSON.stringify(deletions));
+      localStorage.setItem(prefix + 'deletions', JSON.stringify(deletions));
     }
   } catch(e){
     console.warn('[Editor] فشل حفظ الحذف محلياً:', e);
   }
 
-  // 4) مزامنة الحذف مع Firebase Firestore السحابية عبر الخادم
-  var syncResult = await syncDeleteToCloud(qId);
+  // 4) مزامنة الحذف مع Firebase Firestore السحابية في المجموعة المعنية
+  var syncResult = await syncDeleteToCloud(qId, cat);
   var fbSuccess = Boolean(syncResult && syncResult.success);
 
   // 5) إغلاق نافذة التأكيد ونافذة التحرير
@@ -501,27 +788,29 @@ async function executeDeleteQuestionAction(){
   if (confirmOv) confirmOv.classList.remove('open');
   closeEditorEdit();
 
-  // 6) عرض رسالة تأكيد الحذف من البرنامج و Firebase
-  showDeleteSuccessModal(qId, fbSuccess);
-
-  // إشعار Toast
-  toast('🗑️ تم تأكيد حذف السؤال (#' + qId + ') بنجاح من البرنامج و Firebase', 'ok');
-
+  // 6) إظهار رسالة النجاح
+  showDeleteSuccessModal(qId, fbSuccess, cat);
+  toast('🗑️ تم تأكيد حذف السؤال (#' + qId + ') بنجاح من ' + (cat === 'unit_ministerial' ? 'أسئلة الوحدة والوزاري' : 'أسئلة الدرس'), 'ok');
   questionToDeleteId = null;
 
-  // 7) إعادة عرض الصفحة الحالية لتحديث أرقام الأسئلة والواجهة فوراً
+  // 7) تحديث الواجهة فوراً
   refreshCurrentPage();
+  if (typeof renderBankManagerContent === 'function') {
+    renderBankManagerContent();
+  }
 }
 window.executeDeleteQuestionAction = executeDeleteQuestionAction;
 
 // إظهار نافذة رسالة تأكيد الحذف
-function showDeleteSuccessModal(qId, fbSuccess){
+function showDeleteSuccessModal(qId, fbSuccess, category){
+  var catLbl = (category === 'unit_ministerial') ? 'اختبار حسب الوحدة والنماذج الوزارية' : 'اختبار حسب الدرس';
+  var otherLbl = (category === 'unit_ministerial') ? 'اختبار حسب الدرس' : 'اختبار حسب الوحدة والنماذج الوزارية';
   var msgEl = document.getElementById('delete-success-message');
   if (msgEl){
     if (fbSuccess){
-      msgEl.innerHTML = 'تم حذف السؤال رقم (<strong style="color:#e74c3c;">#' + qId + '</strong>) نهائياً من <strong>البرنامج</strong> ولن يظهر للطلبة بعد الآن، وتم تأكيد تسجيل حذفه بنجاح في <strong>قاعدة بيانات Firebase Firestore السحابية</strong>.';
+      msgEl.innerHTML = 'تم حذف السؤال رقم (<strong style="color:#e74c3c;">#' + qId + '</strong>) بنجاح من بنك (<strong>' + catLbl + '</strong>)، وتأكيد حذفه في <strong>Firebase</strong>.<br><span style="color:#059669;font-size:12px;margin-top:6px;display:inline-block;"><i class="fas fa-check-circle"></i> بنك (' + otherLbl + ') بقي محفوظاً ومستقلاً تماماً دون أي تغيير.</span>';
     } else {
-      msgEl.innerHTML = 'تم حذف السؤال رقم (<strong style="color:#e74c3c;">#' + qId + '</strong>) بنجاح من <strong>البرنامج محلياً</strong>، وسيتم تطبيق الحذف سحابياً في Firebase عند توفر الاتصال.';
+      msgEl.innerHTML = 'تم حذف السؤال رقم (<strong style="color:#e74c3c;">#' + qId + '</strong>) من بنك (<strong>' + catLbl + '</strong>) محلياً، وسيتم تطبيق الحذف سحابياً في Firebase عند توفر الاتصال.';
     }
   }
   var ov = document.getElementById('delete-success-overlay');
@@ -537,8 +826,8 @@ function closeDeleteSuccessModal(e){
 window.closeDeleteSuccessModal = closeDeleteSuccessModal;
 
 // حذف سؤال (من نافذة التحرير أو أي استدعاء مباشر)
-function deleteCurrentQuestion(questionId){
-  confirmDeleteQuestion(questionId);
+function deleteCurrentQuestion(questionId, explicitCategory){
+  confirmDeleteQuestion(questionId, explicitCategory);
 }
 window.deleteCurrentQuestion = deleteCurrentQuestion;
 
@@ -565,24 +854,7 @@ function findLessonContext(lessonName){
   return null;
 }
 
-// تطبيق الأسئلة المُضافة محفوظة محلياً على البنك
-function applyLocalAdditions(){
-  try {
-    var raw = localStorage.getItem('qbank_additions');
-    if (!raw) return;
-    var additions = JSON.parse(raw);
-    if (!Array.isArray(additions)) return;
-    var applied = 0;
-    additions.forEach(function(q){
-      // تخطي إذا كان موجوداً بالفعل (مثلاً بعد تصدير البنك وإعادة رفعه)
-      if (bankIndexById[q.id] !== undefined) return;
-      bank.push(q);
-      bankIndexById[q.id] = bank.length - 1;
-      applied++;
-    });
-    if (applied > 0) console.log('[Editor] تم تطبيق ' + applied + ' سؤال مُضاف محفوظ محلياً');
-  } catch(e){ console.warn('[Editor] فشل تطبيق الإضافات المحلية:', e); }
-}
+// ملاحظة: تم دمج تطبيق الأسئلة المضافة محلياً ضمن دالة applyLegacyLocalModifications() و initializeQuestionBanks()
 
 // ══════════════════════════════════════════════
 //  دعم الجداول والصور في نصوص الأسئلة (Tables & Images)
@@ -2458,12 +2730,14 @@ function bindEditorLivePreview() {
   }
 }
 
-// فتح نافذة "إضافة سؤال جديد"
-function openAddQuestion(lessonName){
+// فتح نافذة "إضافة سؤال جديد" مع تحديد بنك الوحدة والوزاري أو بنك الدرس
+function openAddQuestion(lessonName, defaultCategory){
   if (!editorMode) return;
   var ctx = findLessonContext(lessonName);
   if (!ctx){ toast('لم يتم العثور على الدرس في المنهج', 'err'); return; }
   editorAddContext = ctx;
+
+  var activeCat = defaultCategory || (currentQuizCategory || 'unit_ministerial');
 
   var body =
     '<div class="ed-field">' +
@@ -2472,7 +2746,15 @@ function openAddQuestion(lessonName){
         '<span class="ed-ctx-tag"><i class="fas fa-cube"></i> وحدة ' + ctx.unitId + ': ' + ctx.unitName + '</span>' +
         '<span class="ed-ctx-tag"><i class="fas fa-book"></i> ' + ctx.lesson + '</span>' +
       '</div>' +
-      '<p class="editor-hint"><i class="fas fa-magic"></i> سيُضاف السؤال تلقائياً إلى نماذج الوحدة ' + ctx.unitId + ' والنماذج الوزارية.</p>' +
+      '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-top:8px;">' +
+        '<label style="display:block;font-size:12px;font-weight:800;color:#166534;margin-bottom:6px;"><i class="fas fa-database"></i> تخصيص إضافة السؤال لأي بنك ترغب:</label>' +
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;font-weight:700;">' +
+          '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="radio" name="ed-add-category" value="unit_ministerial" ' + (activeCat === 'unit_ministerial' ? 'checked' : '') + '> <span>بنك اختبار الوحدة والنماذج الوزارية فقط</span></label>' +
+          '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="radio" name="ed-add-category" value="lesson" ' + (activeCat === 'lesson' ? 'checked' : '') + '> <span>بنك اختبار حسب الدرس فقط</span></label>' +
+          '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="radio" name="ed-add-category" value="both"> <span>كلا البنكين معاً</span></label>' +
+        '</div>' +
+        '<p style="margin:4px 0 0;font-size:11px;color:#15803d;"><i class="fas fa-shield-alt"></i> التعديل أو الإضافة على بنك الوحدة والنماذج الوزارية لا يؤثر إطلاقاً على أسئلة اختبار الدرس، ويُحفظ في Firebase فوراً.</p>' +
+      '</div>' +
     '</div>' +
     '<div class="ed-field">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
@@ -2513,22 +2795,19 @@ function openAddQuestion(lessonName){
       '<button class="ed-btn ed-btn-save" onclick="saveAddQuestion()">➕ إضافة السؤال</button>' +
       '<button class="ed-btn ed-btn-cancel" onclick="closeEditorEdit()">إلغاء</button>' +
     '</div>' +
-    '<p class="ed-note" style="color:#0f5132;background:#e8f5e9;border:1px solid #c8e6c9;padding:8px 12px;border-radius:8px;font-size:12px;margin-top:12px;"><i class="fas fa-cloud-upload-alt" style="color:#2e7d32"></i> <strong>المزامنة السحابية:</strong> سيُحفظ السؤال في قاعدة بيانات Firebase Firestore السحابية ويتاح فوراً في البرنامج.</p>';
+    '<p class="ed-note" style="color:#0f5132;background:#e8f5e9;border:1px solid #c8e6c9;padding:8px 12px;border-radius:8px;font-size:12px;margin-top:12px;"><i class="fas fa-cloud-upload-alt" style="color:#2e7d32"></i> <strong>المزامنة السحابية:</strong> سيُحفظ السؤال في قاعدة بيانات Firebase Firestore السحابية في المجموعة المحددة ويتاح فوراً في البرنامج.</p>';
 
   var bodyEl = document.getElementById('editor-edit-body');
   if (bodyEl) bodyEl.innerHTML = body;
 
-  // ربط المعاينة المباشرة أثناء الكتابة
   bindEditorLivePreview();
 
-  // تحديث عنوان النافذة
   var titleEl = document.querySelector('#editor-edit-overlay .editor-modal-title');
   if (titleEl) titleEl.innerHTML = '<i class="fas fa-plus-circle"></i> إضافة سؤال جديد';
 
   var ov = document.getElementById('editor-edit-overlay');
   if (ov) ov.classList.add('open');
 
-  // التركيز على حقل النص
   setTimeout(function(){
     var t = document.getElementById('ed-text');
     if (t) t.focus();
@@ -2538,6 +2817,9 @@ function openAddQuestion(lessonName){
 function saveAddQuestion(){
   if (!editorAddContext){ toast('خطأ: لا يوجد سياق للإضافة', 'err'); return; }
   var ctx = editorAddContext;
+
+  var catRadio = document.querySelector('input[name="ed-add-category"]:checked');
+  var targetCategory = catRadio ? catRadio.value : (currentQuizCategory || 'unit_ministerial');
 
   var textEl = document.getElementById('ed-text');
   var hintEl = document.getElementById('ed-hint');
@@ -2550,7 +2832,6 @@ function saveAddQuestion(){
     var el = document.getElementById('ed-opt-' + j);
     newOpts.push(el ? el.value.trim() : '');
   }
-  // جميع الخيارات الأربعة يجب أن تكون مملوءة
   for (var k = 0; k < newOpts.length; k++){
     if (!newOpts[k]){
       toast('الخيار ' + LBL[k] + ' لا يمكن أن يكون فارغاً', 'err');
@@ -2564,12 +2845,16 @@ function saveAddQuestion(){
   var newAnswer = radio ? parseInt(radio.value, 10) : 0;
   if (isNaN(newAnswer) || newAnswer < 0 || newAnswer >= newOpts.length) newAnswer = 0;
 
-  // توليد ID جديد (أعلى id موجود + 1)
+  // توليد ID جديد
   var maxId = 0;
-  for (var i = 0; i < bank.length; i++){ if (bank[i].id > maxId) maxId = bank[i].id; }
+  var allArrays = [bank, lessonBank, unitMinisterialBank];
+  allArrays.forEach(function(arr){
+    if (Array.isArray(arr)) {
+      for (var i = 0; i < arr.length; i++){ if (arr[i] && arr[i].id > maxId) maxId = arr[i].id; }
+    }
+  });
   var newId = maxId + 1;
 
-  // إنشاء كائن السؤال
   var newQ = {
     id: newId,
     sem: ctx.sem,
@@ -2583,26 +2868,46 @@ function saveAddQuestion(){
     _examKey: ''
   };
 
-  // إضافة إلى البنك في الذاكرة
-  bank.push(newQ);
-  bankIndexById[newId] = bank.length - 1;
+  // إضافة السؤال للبنوك المطلوبة
+  if (targetCategory === 'both' || targetCategory === 'unit_ministerial') {
+    unitMinisterialBank.push(cloneQuestion(newQ));
+    unitBankIndexById = buildIndexedMap(unitMinisterialBank);
+    var uRaw = localStorage.getItem('qbank_unit_ministerial_additions');
+    var uAdditions = uRaw ? JSON.parse(uRaw) : [];
+    if (!Array.isArray(uAdditions)) uAdditions = [];
+    uAdditions.push(cloneQuestion(newQ));
+    localStorage.setItem('qbank_unit_ministerial_additions', JSON.stringify(uAdditions));
+  }
 
-  // حفظ في localStorage
-  var raw = localStorage.getItem('qbank_additions');
-  var additions = raw ? JSON.parse(raw) : [];
-  if (!Array.isArray(additions)) additions = [];
-  additions.push(newQ);
-  localStorage.setItem('qbank_additions', JSON.stringify(additions));
+  if (targetCategory === 'both' || targetCategory === 'lesson') {
+    lessonBank.push(cloneQuestion(newQ));
+    lessonBankIndexById = buildIndexedMap(lessonBank);
+    var lRaw = localStorage.getItem('qbank_lesson_additions');
+    var lAdditions = lRaw ? JSON.parse(lRaw) : [];
+    if (!Array.isArray(lAdditions)) lAdditions = [];
+    lAdditions.push(cloneQuestion(newQ));
+    localStorage.setItem('qbank_lesson_additions', JSON.stringify(lAdditions));
+  }
+
+  if (!bank.some(function(item){ return item.id === newQ.id; })) {
+    bank.push(cloneQuestion(newQ));
+  }
+
+  bankIndexById = (currentQuizCategory === 'unit_ministerial') ? unitBankIndexById : lessonBankIndexById;
 
   // مزامنة سحابية مع Firebase Firestore
-  syncAddQuestionToCloud(newQ);
+  syncAddQuestionToCloud(newQ, targetCategory);
 
   closeEditorEdit();
   editorAddContext = null;
-  toast('✅ تمت إضافة السؤال (رقم ' + newId + ') وتحديث السحابة بنجاح', 'ok');
 
-  // إعادة عرض الصفحة الحالية لرؤية السؤال الجديد
+  var catMsg = (targetCategory === 'both') ? 'كلا القسمين' : (targetCategory === 'unit_ministerial' ? 'أسئلة الوحدة والنماذج الوزارية' : 'أسئلة الدرس');
+  toast('✅ تمت إضافة السؤال (#' + newId + ') في ' + catMsg + ' وتحديث السحابة بنجاح', 'ok');
+
   refreshCurrentPage();
+  if (typeof renderBankManagerContent === 'function') {
+    renderBankManagerContent();
+  }
 }
 
 // تفعيل/إيقاف وضع المحرر
@@ -2780,12 +3085,35 @@ function submitEditorPwd(){
   }
 }
 
-// نافذة تحرير السؤال
-function openEditorEdit(questionId){
+// نافذة تحرير السؤال مع عزل البنوك
+var editorCurrentEditingCategory = 'unit_ministerial';
+
+function openEditorEdit(questionId, explicitCategory){
   if (!editorMode) return;
-  var idx = bankIndexById[questionId];
-  if (idx === undefined){ toast('السؤال غير موجود', 'err'); return; }
-  var q = bank[idx];
+
+  var targetCat = explicitCategory || currentQuizCategory || 'unit_ministerial';
+  var targetBank = (targetCat === 'unit_ministerial') ? unitMinisterialBank : lessonBank;
+  var q = targetBank.find(function(item){ return item.id === questionId; });
+
+  // فحص احتياطي إذا لم يكن موجوداً في البنك المستهدف
+  if (!q) {
+    if (targetCat === 'unit_ministerial') {
+      q = lessonBank.find(function(item){ return item.id === questionId; });
+      if (q) targetCat = 'lesson';
+    } else {
+      q = unitMinisterialBank.find(function(item){ return item.id === questionId; });
+      if (q) targetCat = 'unit_ministerial';
+    }
+  }
+
+  if (!q && Array.isArray(currentQuiz)){
+    q = currentQuiz.find(function(item){ return item.id === questionId; });
+  }
+
+  if (!q){ toast('السؤال غير موجود في البنك', 'err'); return; }
+  editorCurrentEditingCategory = targetCat;
+
+  var catLabel = (targetCat === 'unit_ministerial') ? 'بنك اختبار حسب الوحدة والنماذج الوزارية' : 'بنك اختبار حسب الدرس';
 
   // عدد الخيارات الحالي + ملاحظة إن كان أقل من 4
   var currentOptsCount = (q.options || []).length;
@@ -2793,6 +3121,18 @@ function openEditorEdit(questionId){
 
   var body =
     '<div class="ed-field">' +
+      '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;margin-bottom:8px;">' +
+        '<div style="font-size:12px;font-weight:800;color:#1e40af;display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+          '<span><i class="fas fa-layer-group"></i> البنك المستهدف: <strong>' + catLabel + '</strong></span>' +
+          '<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-size:11px;">سؤال #' + q.id + '</span>' +
+        '</div>' +
+        '<div style="margin-top:6px;font-size:11px;font-weight:700;color:#334155;display:flex;gap:12px;flex-wrap:wrap;">' +
+          '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;"><input type="radio" name="ed-save-category" value="unit_ministerial" ' + (targetCat === 'unit_ministerial' ? 'checked' : '') + '> <span>حفظ في بنك الوحدة والوزاري فقط</span></label>' +
+          '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;"><input type="radio" name="ed-save-category" value="lesson" ' + (targetCat === 'lesson' ? 'checked' : '') + '> <span>حفظ في بنك الدرس فقط</span></label>' +
+          '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;"><input type="radio" name="ed-save-category" value="both"> <span>حفظ في كلا البنكين</span></label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#059669;margin-top:4px;"><i class="fas fa-shield-alt"></i> لن تتأثر أسئلة القسم الآخر إطلاقاً بالتعديل ما لم تختر حفظها معاً.</div>' +
+      '</div>' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
         '<label class="ed-label" style="margin-bottom:0;"><i class="fas fa-question-circle"></i> نص السؤال (يدعم الجداول والصور)</label>' +
         '<button type="button" class="ed-tb-preview-btn" onclick="toggleEditorTextPreview()" id="btn-toggle-qpreview"><i class="fas fa-eye"></i> معاينة السؤال</button>' +
@@ -2847,21 +3187,18 @@ function openEditorEdit(questionId){
     '<div class="ed-actions ed-actions-3">' +
       '<button class="ed-btn ed-btn-save" onclick="saveEditorEdit(' + questionId + ')">💾 حفظ التعديل</button>' +
       '<button class="ed-btn ed-btn-cancel" onclick="closeEditorEdit()">إلغاء</button>' +
-      '<button class="ed-btn ed-btn-delete" onclick="deleteCurrentQuestion(' + questionId + ')"><i class="fas fa-trash"></i> حذف السؤال</button>' +
+      '<button class="ed-btn ed-btn-delete" onclick="deleteCurrentQuestion(' + questionId + ', \'' + targetCat + '\')"><i class="fas fa-trash"></i> حذف السؤال</button>' +
     '</div>' +
     '<p class="ed-note" style="color:#0f5132;background:#e8f5e9;border:1px solid #c8e6c9;padding:8px 12px;border-radius:8px;font-size:12px;margin-top:12px;"><i class="fas fa-cloud-upload-alt" style="color:#2e7d32"></i> <strong>المزامنة السحابية مفعّلة:</strong> عند الضغط على "حفظ التعديل"، سيتم تحديث هذا السؤال والتلميح في قاعدة بيانات Firebase Firestore السحابية فوراً وتطبيقه على البرنامج للجميع.</p>';
 
   var bodyEl = document.getElementById('editor-edit-body');
   if (bodyEl) bodyEl.innerHTML = body;
 
-  // ربط المعاينة المباشرة أثناء الكتابة
   bindEditorLivePreview();
 
-  // تحديث عنوان النافذة (لإعادة ضبطه إذا كانت مفتوحة سابقاً في وضع "إضافة")
   var titleEl = document.querySelector('#editor-edit-overlay .editor-modal-title');
-  if (titleEl) titleEl.innerHTML = '<i class="fas fa-edit"></i> تحرير السؤال';
+  if (titleEl) titleEl.innerHTML = '<i class="fas fa-edit"></i> تحرير السؤال (رقم #' + q.id + ')';
 
-  // إعادة ضبط سياق الإضافة (لأننا الآن في وضع تحرير)
   editorAddContext = null;
 
   var ov = document.getElementById('editor-edit-overlay');
@@ -2875,34 +3212,28 @@ function closeEditorEdit(){
 }
 
 function saveEditorEdit(questionId){
-  var idx = bankIndexById[questionId];
-  if (idx === undefined){ toast('السؤال غير موجود', 'err'); return; }
-  var q = bank[idx];
+  var saveCatRadio = document.querySelector('input[name="ed-save-category"]:checked');
+  var targetCategory = saveCatRadio ? saveCatRadio.value : (editorCurrentEditingCategory || 'unit_ministerial');
 
   var textEl = document.getElementById('ed-text');
   var lessonEl = document.getElementById('ed-lesson');
   var hintEl = document.getElementById('ed-hint');
-  var newText = textEl ? textEl.value.trim() : q.text;
+  var newText = textEl ? textEl.value.trim() : '';
   if (!newText){ toast('نص السؤال لا يمكن أن يكون فارغاً', 'err'); textEl.focus(); return; }
-  var newLesson = lessonEl ? lessonEl.value.trim() : (q.lesson || '');
-  var newHint = hintEl ? hintEl.value.trim() : (q.hint || '');
+  var newLesson = lessonEl ? lessonEl.value.trim() : '';
+  var newHint = hintEl ? hintEl.value.trim() : '';
 
-  // قراءة الإجابة الصحيحة المختارة (قبل تصفية الخيارات)
   var radio = document.querySelector('input[name="ed-answer"]:checked');
-  var selectedAnswerIdx = radio ? parseInt(radio.value, 10) : q.answer;
+  var selectedAnswerIdx = radio ? parseInt(radio.value, 10) : 0;
   if (isNaN(selectedAnswerIdx) || selectedAnswerIdx < 0 || selectedAnswerIdx >= 4) selectedAnswerIdx = 0;
 
-  // قراءة الخيارات الأربعة من الحقول (دائماً 4 حقول)
   var rawOpts = [];
   for (var j = 0; j < 4; j++){
     var el = document.getElementById('ed-opt-' + j);
     rawOpts.push(el ? el.value : '');
   }
 
-  // قراءة نص الإجابة الصحيحة المختارة (قبل أي تصفية)
   var correctText = rawOpts[selectedAnswerIdx];
-
-  // التحقق: الإجابة الصحيحة يجب أن تكون غير فارغة
   if (!correctText || !correctText.trim()){
     toast('الإجابة الصحيحة (الخيار ' + LBL[selectedAnswerIdx] + ') لا يمكن أن تكون فارغة', 'err');
     var correctEl = document.getElementById('ed-opt-' + selectedAnswerIdx);
@@ -2910,24 +3241,13 @@ function saveEditorEdit(questionId){
     return;
   }
 
-  // فلترة الخيارات الفارغة من النهاية (للسماح بـ 2 أو 3 أو 4 خيارات)
-  // الخيارات الفارغة في الوسط تبقى كما هي (لن تُعرض في الاختبار بسبب validInfo)
-  var newOpts = rawOpts.slice(); // نسخة
-  // إزالة الخيارات الفارغة من النهاية فقط
+  var newOpts = rawOpts.slice();
   while (newOpts.length > 2 && (!newOpts[newOpts.length - 1] || !newOpts[newOpts.length - 1].trim())){
     newOpts.pop();
   }
 
-  // إعادة حساب فهرس الإجابة الصحيحة بعد الفلترة
   var newAnswer = newOpts.indexOf(correctText);
-  if (newAnswer === -1) newAnswer = 0; // احتياطي
-
-  // تطبيق التعديل على البنك في الذاكرة
-  q.text = newText;
-  q.options = newOpts;
-  q.answer = newAnswer;
-  q.lesson = newLesson;
-  q.hint = newHint;
+  if (newAnswer === -1) newAnswer = 0;
 
   var patch = {
     text: newText,
@@ -2938,17 +3258,61 @@ function saveEditorEdit(questionId){
     hintDeleted: (newHint === '')
   };
 
-  // حفظ في localStorage كذاكرة مؤقتة محلية فورية
-  saveOverride(questionId, patch);
+  // تطبيق التعديل بدقة على البنك/البنوك المستهدفة
+  var updatedCount = 0;
+  if (targetCategory === 'both' || targetCategory === 'unit_ministerial') {
+    var uIdx = unitMinisterialBank.findIndex(function(item){ return item.id === questionId; });
+    if (uIdx !== -1) {
+      Object.assign(unitMinisterialBank[uIdx], patch);
+      saveOverride(questionId, patch, 'unit_ministerial');
+      syncOverrideToCloud(questionId, patch, 'unit_ministerial');
+      updatedCount++;
+    }
+  }
 
-  // إرسال ومزامنة التعديل في قاعدة بيانات Firebase Firestore السحابية
-  syncOverrideToCloud(questionId, patch);
+  if (targetCategory === 'both' || targetCategory === 'lesson') {
+    var lIdx = lessonBank.findIndex(function(item){ return item.id === questionId; });
+    if (lIdx !== -1) {
+      Object.assign(lessonBank[lIdx], patch);
+      saveOverride(questionId, patch, 'lesson');
+      syncOverrideToCloud(questionId, patch, 'lesson');
+      updatedCount++;
+    }
+  }
+
+  // تحديث bank النشط حالياً
+  var curIdx = bank.findIndex(function(item){ return item.id === questionId; });
+  if (curIdx !== -1) {
+    if (targetCategory === 'both' ||
+       (targetCategory === 'unit_ministerial' && currentQuizCategory === 'unit_ministerial') ||
+       (targetCategory === 'lesson' && currentQuizCategory === 'lesson')) {
+      Object.assign(bank[curIdx], patch);
+    }
+  }
+
+  // تحديث السؤال في currentQuiz إذا كان مفتوحاً
+  if (Array.isArray(currentQuiz)) {
+    var inQuiz = currentQuiz.find(function(item){ return item.id === questionId; });
+    if (inQuiz) {
+      inQuiz.text = newText;
+      inQuiz.lesson = newLesson;
+      inQuiz.hint = newHint;
+      // إذا لم يكن هذا السؤال تم خلط خياراته بالفعل بشكل مستقل
+      if (!inQuiz._origOptions) {
+        inQuiz.options = newOpts.slice();
+        inQuiz.answer = newAnswer;
+      }
+    }
+  }
 
   closeEditorEdit();
-  toast('✅ تم حفظ التعديل والتلميح ومزامنته سحابياً في Firebase!', 'ok');
+  var catTitle = (targetCategory === 'both') ? 'كلا البنكين' : (targetCategory === 'unit_ministerial' ? 'بنك اختبار الوحدة والوزاري' : 'بنك اختبار الدرس');
+  toast('✅ تم حفظ التعديل والتلميح في ' + catTitle + ' ومزامنته في Firebase بنجاح!', 'ok');
 
-  // إعادة عرض الصفحة الحالية لرؤية التغيير
   refreshCurrentPage();
+  if (typeof renderBankManagerContent === 'function') {
+    renderBankManagerContent();
+  }
 }
 
 function insertHintPrefix(){
@@ -3171,7 +3535,8 @@ window.updateEditorOptionsPreview = updateEditorOptionsPreview;
 // نماذج الوحدات: كل نموذج 20 سؤال بالترتيب
 // الأسئلة الزائدة (أقل من 10) تُلحق بالنموذج الأخير بدلاً من إهمالها
 function getUnitModels(unitId) {
-  var qs = bank.filter(function(q){ return q.unit === unitId && !q._examKey; });
+  var targetBank = (unitMinisterialBank && unitMinisterialBank.length) ? unitMinisterialBank : bank;
+  var qs = targetBank.filter(function(q){ return q.unit === unitId && !q._examKey; });
   var models = [];
   var i = 0;
   // إنشاء نماذج كاملة بحجم 20
@@ -3313,6 +3678,7 @@ var SPEC_TABLE = {
 // مأخوذة مباشرة من أسئلة الدروس (25 سؤالاً للفصل الأول + 25 سؤالاً للفصل الثاني)
 // تغطي كافة دروس المادة الـ 28 بنمط دوري عادل
 function getMinisterialModels() {
+  var targetBank = (unitMinisterialBank && unitMinisterialBank.length) ? unitMinisterialBank : bank;
   var unitIds = [1, 2, 3, 4, 5, 6, 7];
   var specQuotas = { 1: 11, 2: 7, 3: 7, 4: 6, 5: 6, 6: 6, 7: 7 };
   var numModels = 5;
@@ -3321,7 +3687,7 @@ function getMinisterialModels() {
   var byUnitAndLesson = {};
   unitIds.forEach(function(uid) {
     byUnitAndLesson[uid] = {};
-    var uQs = bank.filter(function(q) { return q.unit === uid && !q._examKey; });
+    var uQs = targetBank.filter(function(q) { return q.unit === uid && !q._examKey; });
     uQs.forEach(function(q) {
       var lName = q.lesson || 'عام';
       if (!byUnitAndLesson[uid][lName]) byUnitAndLesson[uid][lName] = [];
@@ -3369,13 +3735,14 @@ function getMinisterialModels() {
 
 // توليد نموذج وزاري عشوائي مطابق لجدول المواصفات (50 سؤالاً)
 function generateRandomMinisterialModel() {
+  var targetBank = (unitMinisterialBank && unitMinisterialBank.length) ? unitMinisterialBank : bank;
   var unitIds = [1, 2, 3, 4, 5, 6, 7];
   var specQuotas = { 1: 11, 2: 7, 3: 7, 4: 6, 5: 6, 6: 6, 7: 7 };
   var randomModel = [];
 
   unitIds.forEach(function(uid) {
     var quota = specQuotas[uid];
-    var pool = bank.filter(function(q) { return q.unit === uid && !q._examKey; });
+    var pool = targetBank.filter(function(q) { return q.unit === uid && !q._examKey; });
     var shuffled = pool.slice().sort(function() { return 0.5 - Math.random(); });
     randomModel = randomModel.concat(shuffled.slice(0, quota));
   });
@@ -6455,9 +6822,12 @@ window.speakSingleAqyem = speakSingleAqyem;
 // ══════════════════════════════════════════════
 var selectedLessonSem = null;
 function renderLessonPage() {
+  currentQuizCategory = 'lesson';
+  bankIndexById = lessonBankIndexById;
+  var targetBank = (lessonBank && lessonBank.length) ? lessonBank : bank;
   var html = '<div class="page-title"><i class="fas fa-book-open"></i> اختبار حسب الدرس</div><div class="sem-cards">';
   [1,2].forEach(function(s){
-    var cnt = bank.filter(function(q){return q.sem===s&&!q._examKey;}).length;
+    var cnt = targetBank.filter(function(q){return q.sem===s&&!q._examKey;}).length;
     html += '<div class="sem-card sem'+s+'" onclick="renderSemLessons('+s+')">' +
       '<div class="sc-icon">'+(s===1?'<i class="fas fa-book"></i>':'<i class="fas fa-book"></i>')+'</div>' +
       '<div class="sc-name">'+CUR[s].name+'</div><div class="sc-cnt">'+cnt+' سؤال</div></div>';
@@ -6470,16 +6840,19 @@ function renderLessonPage() {
 }
 
 function renderSemLessons(sem) {
+  currentQuizCategory = 'lesson';
+  bankIndexById = lessonBankIndexById;
+  var targetBank = (lessonBank && lessonBank.length) ? lessonBank : bank;
   selectedLessonSem = sem;
   var html = '';
   CUR[sem].units.forEach(function(u){
     var hasQs = u.lessons.some(function(l){
-      return bank.filter(function(q){return q.lesson===l&&!q._examKey;}).length > 0;
+      return targetBank.filter(function(q){return q.lesson===l&&!q._examKey;}).length > 0;
     });
     if (!hasQs) return;
     html += '<div class="unit-sec"><div class="unit-sec-hdr">الوحدة '+u.id+': '+u.name+'</div>';
     u.lessons.forEach(function(l){
-      var cnt = bank.filter(function(q){return q.lesson===l&&!q._examKey;}).length;
+      var cnt = targetBank.filter(function(q){return q.lesson===l&&!q._examKey;}).length;
       if (!cnt) return;
       html += '<div class="lesson-row" onclick="showLessonAction(\''+esc(l)+'\',\''+esc(u.name)+'\')">' +
         '<span class="lr-icon"><i class="fas fa-file-alt"></i></span>' +
@@ -6494,11 +6867,14 @@ function renderSemLessons(sem) {
 }
 
 function showLessonAction(lesson, unitName) {
+  currentQuizCategory = 'lesson';
+  bankIndexById = lessonBankIndexById;
+  var targetBank = (lessonBank && lessonBank.length) ? lessonBank : bank;
   if (!editorMode) {
     launchLessonQuiz(lesson);
     return;
   }
-  var cnt = bank.filter(function(q){return q.lesson===lesson&&!q._examKey;}).length;
+  var cnt = targetBank.filter(function(q){return q.lesson===lesson&&!q._examKey;}).length;
   var old = document.getElementById('lesson-action-box');
   if (old) old.remove();
   var box = document.createElement('div');
@@ -6521,7 +6897,10 @@ function showLessonAction(lesson, unitName) {
 }
 
 function launchLessonQuiz(lessonName) {
-  var qs = bank.filter(function(q){return q.lesson===lessonName&&!q._examKey;});
+  currentQuizCategory = 'lesson';
+  bankIndexById = lessonBankIndexById;
+  var targetBank = (lessonBank && lessonBank.length) ? lessonBank : bank;
+  var qs = targetBank.filter(function(q){return q.lesson===lessonName&&!q._examKey;});
   if (!qs.length) { toast('لا توجد أسئلة في هذا الدرس','err'); return; }
   startQuizSession(qs, lessonName);
 }
@@ -6530,11 +6909,14 @@ function launchLessonQuiz(lessonName) {
 //  صفحة الوحدات (نماذج ثابتة)
 // ══════════════════════════════════════════════
 function renderUnitPage() {
+  currentQuizCategory = 'unit_ministerial';
+  bankIndexById = unitBankIndexById;
+  var targetBank = (unitMinisterialBank && unitMinisterialBank.length) ? unitMinisterialBank : bank;
   var html = '<div class="page-title"><i class="fas fa-cubes"></i> اختبار حسب الوحدة</div><div class="units-grid">';
   [1,2].forEach(function(s){
     CUR[s].units.forEach(function(u){
       var models = getUnitModels(u.id);
-      var cnt = bank.filter(function(q){return q.unit===u.id&&!q._examKey;}).length;
+      var cnt = targetBank.filter(function(q){return q.unit===u.id&&!q._examKey;}).length;
       html += '<div class="unit-card-m usem'+s+'">' +
         '<div class="ucm-num">و'+u.id+'</div>' +
         '<div class="ucm-name">'+u.name+'</div>' +
@@ -6556,6 +6938,8 @@ function renderUnitPage() {
 }
 
 function launchUnitModel(unitId, modelIndex) {
+  currentQuizCategory = 'unit_ministerial';
+  bankIndexById = unitBankIndexById;
   var models = getUnitModels(unitId);
   if (!models[modelIndex]) { toast('النموذج غير متاح','err'); return; }
   var uName = '';
@@ -6581,6 +6965,8 @@ function toggleSpecTableView() {
 }
 
 function renderMinisterialPage() {
+  currentQuizCategory = 'unit_ministerial';
+  bankIndexById = unitBankIndexById;
   var models = getMinisterialModels();
   
   var html = '<div class="page-title"><i class="fas fa-star" style="color:#d97706;"></i> النماذج الوزارية الشاملة لشهادة الثانوية العامة</div>' +
@@ -6806,12 +7192,16 @@ function renderMinisterialPage() {
 }
 
 function launchMinModel(modelIndex) {
+  currentQuizCategory = 'unit_ministerial';
+  bankIndexById = unitBankIndexById;
   var models = getMinisterialModels();
   if (!models[modelIndex]) { toast('النموذج غير متاح', 'err'); return; }
   startQuizSession(models[modelIndex], 'النموذج الوزاري الشامل المقترح رقم ' + (modelIndex + 1));
 }
 
 function launchRandomMinisterialExam() {
+  currentQuizCategory = 'unit_ministerial';
+  bankIndexById = unitBankIndexById;
   var model = generateRandomMinisterialModel();
   if (!model || model.length < 50) { toast('تعذر توليد النموذج العشوائي', 'err'); return; }
   startQuizSession(model, 'نموذج وزاري تجريبي عشوائي (50 سؤالاً)');
@@ -6922,16 +7312,123 @@ function validInfo(q) {
   return { opts: v, answerIdx: a };
 }
 
-// تجهيز مجموعة الأسئلة وحجب الإجابات المباشرة عن DOM وعن Console
-function prepareQuiz(qs) {
-  return qs.map(function(orig) {
-    var cleanQ = Object.assign({}, orig);
-    var ans = (orig.answer !== undefined) ? orig.answer : (orig._secureAnswer !== undefined ? orig._secureAnswer : 0);
-    registerQuestionAnswer(cleanQ.id, ans);
-    cleanQ._secureAnswer = ans;
-    // حذف خاصية answer المباشرة من كائن السؤال لمنع كشفها في المتصفح
+// ══════════════════════════════════════════════
+//  محرك خلط الأسئلة ومواقع الإجابات الصحيحة في كل مرة يعود فيها الطالب
+// ══════════════════════════════════════════════
+
+// خلط خيارات السؤال عشوائياً وتغيير موقع الإجابة الصحيحة تلقائياً وبدقة
+function shuffleQuestionOptions(origQ) {
+  var cleanQ = Object.assign({}, origQ);
+
+  // استخراج مؤشر الإجابة الصحيحة الحالي
+  var origAns = 0;
+  if (origQ.answer !== undefined) {
+    origAns = origQ.answer;
+  } else if (origQ._secureAnswer !== undefined) {
+    origAns = origQ._secureAnswer;
+  } else if (_secureAnswerVault[origQ.id] !== undefined) {
+    origAns = _secureAnswerVault[origQ.id];
+  }
+
+  var rawOpts = Array.isArray(origQ.options) ? origQ.options.slice() : [];
+
+  // إذا لم يكن هناك خيارات كافية للخلط
+  if (!rawOpts || rawOpts.length <= 1) {
+    cleanQ.options = rawOpts;
+    cleanQ._secureAnswer = origAns;
+    registerQuestionAnswer(cleanQ.id, origAns);
     delete cleanQ.answer;
     return cleanQ;
+  }
+
+  // الاحتفاظ بنص الخيار الصحيح قبل الخلط
+  var correctOptText = rawOpts[origAns];
+  if (correctOptText === undefined || correctOptText === null) {
+    correctOptText = rawOpts[0];
+    origAns = 0;
+  }
+
+  // تصفية الخيارات غير الفارغة
+  var validList = [];
+  for (var i = 0; i < rawOpts.length; i++) {
+    var itemText = rawOpts[i];
+    if (itemText !== undefined && itemText !== null && String(itemText).trim() !== '') {
+      validList.push({
+        text: itemText,
+        isCorrect: (i === origAns || itemText === correctOptText)
+      });
+    }
+  }
+
+  if (validList.length <= 1) {
+    cleanQ.options = rawOpts;
+    cleanQ._secureAnswer = origAns;
+    registerQuestionAnswer(cleanQ.id, origAns);
+    delete cleanQ.answer;
+    return cleanQ;
+  }
+
+  // التأكد من وجود خيار صحيح واحد
+  var correctCount = validList.filter(function(v){ return v.isCorrect; }).length;
+  if (correctCount === 0) {
+    validList[0].isCorrect = true;
+  } else if (correctCount > 1) {
+    var foundFirst = false;
+    for (var k = 0; k < validList.length; k++) {
+      if (validList[k].isCorrect) {
+        if (!foundFirst) foundFirst = true;
+        else validList[k].isCorrect = false;
+      }
+    }
+  }
+
+  // فحص ما إذا كان هناك خيار خاص "جميع ما ذكر" أو "لا شيء مما ذكر" ويُفضّل إبقاؤه في النهاية
+  var lastOptionIndex = -1;
+  for (var vIdx = 0; vIdx < validList.length; vIdx++) {
+    var t = String(validList[vIdx].text).trim();
+    if (t === 'جميع ما ذكر' || t === 'كل ما ذكر' || t === 'لا شيء مما ذكر' || t === 'جميع ما سبق' || t === 'كل ما سبق') {
+      lastOptionIndex = vIdx;
+      break;
+    }
+  }
+
+  var finalItems = [];
+  if (lastOptionIndex !== -1) {
+    var specialItem = validList[lastOptionIndex];
+    var others = validList.filter(function(_, idx){ return idx !== lastOptionIndex; });
+    var shuffledOthers = shuf(others);
+    finalItems = shuffledOthers.concat([specialItem]);
+  } else {
+    finalItems = shuf(validList);
+  }
+
+  var newOptions = [];
+  var newCorrectIndex = 0;
+  for (var m = 0; m < finalItems.length; m++) {
+    newOptions.push(finalItems[m].text);
+    if (finalItems[m].isCorrect) {
+      newCorrectIndex = m;
+    }
+  }
+
+  cleanQ.options = newOptions;
+  cleanQ._secureAnswer = newCorrectIndex;
+  registerQuestionAnswer(cleanQ.id, newCorrectIndex);
+  delete cleanQ.answer;
+
+  return cleanQ;
+}
+
+// تجهيز مجموعة الأسئلة مع خلط أماكن الأسئلة وتغيير مواقع الإجابات الصحيحة في كل مرة
+function prepareQuiz(qs, skipQuestionShuffle) {
+  if (!Array.isArray(qs)) return [];
+
+  // 1) تغيير أماكن وترتيب الأسئلة عشوائياً في كل مرة يدخل أو يعود فيها الطالب للاختبار
+  var pool = skipQuestionShuffle ? qs.slice() : shuf(qs);
+
+  // 2) تغيير وتدوير مواقع الإجابات الصحيحة والخيارات عشوائياً لكل سؤال
+  return pool.map(function(orig) {
+    return shuffleQuestionOptions(orig);
   });
 }
 
@@ -6946,6 +7443,18 @@ function saveQuizProgress() {
       mode: currentMode,
       originPage: quizOriginPage || 'home',
       qIds: currentQuiz.map(function(q){ return q.id; }),
+      savedQuestions: currentQuiz.map(function(q){
+        return {
+          id: q.id,
+          options: q.options,
+          _secureAnswer: resolveQuestionAnswer(q),
+          text: q.text,
+          lesson: q.lesson,
+          hint: q.hint,
+          sem: q.sem,
+          unit: q.unit
+        };
+      }),
       userAnswers: userAnswers || {},
       timeLeft: timeLeft || 0,
       timestamp: Date.now()
@@ -7007,22 +7516,30 @@ function resumeStudentSession() {
     toast('لا توجد جلسة اختبار محفوظة حالياً', 'warn');
     return;
   }
-  var restoredQs = [];
-  session.qIds.forEach(function(id){
-    var idx = bankIndexById[id];
-    if (idx !== undefined && bank[idx]) {
-      restoredQs.push(bank[idx]);
-    }
-  });
 
-  if (!restoredQs.length) {
-    toast('تعذر استعادة أسئلة الاختبار المحفوظ، يرجى بدء اختبار جديد', 'err');
-    clearQuizProgress();
-    renderHome();
-    return;
+  if (Array.isArray(session.savedQuestions) && session.savedQuestions.length) {
+    currentQuiz = session.savedQuestions.map(function(sq){
+      registerQuestionAnswer(sq.id, sq._secureAnswer);
+      return Object.assign({}, sq);
+    });
+  } else {
+    var restoredQs = [];
+    session.qIds.forEach(function(id){
+      var idx = bankIndexById[id];
+      if (idx !== undefined && bank[idx]) {
+        restoredQs.push(bank[idx]);
+      }
+    });
+
+    if (!restoredQs.length) {
+      toast('تعذر استعادة أسئلة الاختبار المحفوظ، يرجى بدء اختبار جديد', 'err');
+      clearQuizProgress();
+      renderHome();
+      return;
+    }
+    currentQuiz = prepareQuiz(restoredQs, true);
   }
 
-  currentQuiz = prepareQuiz(restoredQs);
   quizSubmitted = false;
   currentQuizTitle = session.title || 'الاختبار المستأنف';
   currentMode = session.mode || 'train';

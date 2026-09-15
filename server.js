@@ -115,7 +115,11 @@ app.get('/api/questions/sync', async (req, res) => {
     const additions = [];
     const deletions = [];
 
-    // 1) Fetch overrides
+    const unitOverrides = {};
+    const unitAdditions = [];
+    const unitDeletions = [];
+
+    // 1) Fetch Lesson overrides
     const overridesSnap = await getDocs(collection(db, 'question_overrides'));
     overridesSnap.forEach((docSnap) => {
       const data = docSnap.data();
@@ -132,7 +136,7 @@ app.get('/api/questions/sync', async (req, res) => {
       }
     });
 
-    // 2) Fetch additions
+    // 2) Fetch Lesson additions
     const additionsSnap = await getDocs(collection(db, 'question_additions'));
     additionsSnap.forEach((docSnap) => {
       const data = docSnap.data();
@@ -141,7 +145,7 @@ app.get('/api/questions/sync', async (req, res) => {
       }
     });
 
-    // 3) Fetch deletions
+    // 3) Fetch Lesson deletions
     const deletionsSnap = await getDocs(collection(db, 'question_deletions'));
     deletionsSnap.forEach((docSnap) => {
       const data = docSnap.data();
@@ -150,15 +154,76 @@ app.get('/api/questions/sync', async (req, res) => {
       }
     });
 
+    // 4) Fetch Unit & Ministerial overrides
+    try {
+      const unitOverridesSnap = await getDocs(collection(db, 'unit_ministerial_overrides'));
+      unitOverridesSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && data.questionId !== undefined) {
+          unitOverrides[data.questionId] = {
+            text: data.text,
+            options: data.options,
+            answer: data.answer,
+            lesson: data.lesson || '',
+            hint: data.hint !== undefined ? data.hint : '',
+            hintDeleted: Boolean(data.hintDeleted),
+            updatedAt: data.updatedAt || null
+          };
+        }
+      });
+    } catch (err) {
+      console.warn('[API Sync] Unit overrides fetch note:', err.message);
+    }
+
+    // 5) Fetch Unit & Ministerial additions
+    try {
+      const unitAdditionsSnap = await getDocs(collection(db, 'unit_ministerial_additions'));
+      unitAdditionsSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && data.id !== undefined) {
+          unitAdditions.push(data);
+        }
+      });
+    } catch (err) {
+      console.warn('[API Sync] Unit additions fetch note:', err.message);
+    }
+
+    // 6) Fetch Unit & Ministerial deletions
+    try {
+      const unitDeletionsSnap = await getDocs(collection(db, 'unit_ministerial_deletions'));
+      unitDeletionsSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && data.questionId !== undefined) {
+          unitDeletions.push(Number(data.questionId));
+        }
+      });
+    } catch (err) {
+      console.warn('[API Sync] Unit deletions fetch note:', err.message);
+    }
+
     const payload = {
       success: true,
+      lesson: {
+        overrides,
+        additions,
+        deletions
+      },
+      unitMinisterial: {
+        overrides: unitOverrides,
+        additions: unitAdditions,
+        deletions: unitDeletions
+      },
+      // Backward compatibility fields
       overrides,
       additions,
       deletions,
       count: {
-        overrides: Object.keys(overrides).length,
-        additions: additions.length,
-        deletions: deletions.length
+        lessonOverrides: Object.keys(overrides).length,
+        lessonAdditions: additions.length,
+        lessonDeletions: deletions.length,
+        unitOverrides: Object.keys(unitOverrides).length,
+        unitAdditions: unitAdditions.length,
+        unitDeletions: unitDeletions.length
       },
       timestamp: now
     };
@@ -166,7 +231,7 @@ app.get('/api/questions/sync', async (req, res) => {
     // Cache in RAM
     questionsSyncCache = payload;
     lastSyncFetchTime = now;
-    syncDataETag = `W/"sync-${now}-${Object.keys(overrides).length}-${additions.length}-${deletions.length}"`;
+    syncDataETag = `W/"sync-${now}-${Object.keys(overrides).length}-${additions.length}-${Object.keys(unitOverrides).length}-${unitAdditions.length}"`;
 
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
     res.setHeader('ETag', syncDataETag);
@@ -199,15 +264,20 @@ app.post('/api/questions/override', async (req, res) => {
   }
 
   try {
-    const { questionId, text, options, answer, lesson, hint } = req.body;
+    const { questionId, text, options, answer, lesson, hint, category } = req.body;
     if (questionId === undefined || !text || !Array.isArray(options)) {
       return res.status(400).json({ success: false, error: 'بيانات السؤال غير مكتملة' });
     }
 
     const qIdNum = Number(questionId);
-    const qDocRef = doc(db, 'question_overrides', String(qIdNum));
+    const cat = String(category || 'lesson').toLowerCase();
+    const isUnit = (cat === 'unit_ministerial' || cat === 'unit');
+    const collName = isUnit ? 'unit_ministerial_overrides' : 'question_overrides';
+
+    const qDocRef = doc(db, collName, String(qIdNum));
     const payload = {
       questionId: qIdNum,
+      category: isUnit ? 'unit_ministerial' : 'lesson',
       text: String(text).trim(),
       options: options.map(opt => String(opt || '').replace(/\r\n/g, '\n').trim()),
       answer: Number(answer) || 0,
@@ -219,11 +289,11 @@ app.post('/api/questions/override', async (req, res) => {
 
     await setDoc(qDocRef, payload, { merge: true });
     invalidateSyncCache();
-    console.log(`[Firestore] Question override saved for ID #${qIdNum}`);
+    console.log(`[Firestore] Question override saved to ${collName} for ID #${qIdNum}`);
 
     res.json({
       success: true,
-      message: `تم حفظ وتحديث السؤال رقم ${qIdNum} في قاعدة بيانات Firebase السحابية بنجاح!`,
+      message: `تم حفظ وتحديث السؤال رقم ${qIdNum} في بنك (${isUnit ? 'اختبار حسب الوحدة والنماذج الوزارية' : 'اختبار حسب الدرس'}) بقاعدة بيانات Firebase بنجاح!`,
       data: payload
     });
   } catch (error) {
@@ -249,7 +319,7 @@ app.post('/api/questions/add', async (req, res) => {
     }
 
     const qIdNum = Number(question.id);
-    const qDocRef = doc(db, 'question_additions', String(qIdNum));
+    const cat = String(question.category || 'lesson').toLowerCase();
     const payload = {
       id: qIdNum,
       sem: Number(question.sem) || 1,
@@ -263,13 +333,21 @@ app.post('/api/questions/add', async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    await setDoc(qDocRef, payload, { merge: true });
+    if (cat === 'both') {
+      await setDoc(doc(db, 'question_additions', String(qIdNum)), Object.assign({}, payload, { category: 'lesson' }), { merge: true });
+      await setDoc(doc(db, 'unit_ministerial_additions', String(qIdNum)), Object.assign({}, payload, { category: 'unit_ministerial' }), { merge: true });
+    } else if (cat === 'unit_ministerial' || cat === 'unit') {
+      await setDoc(doc(db, 'unit_ministerial_additions', String(qIdNum)), Object.assign({}, payload, { category: 'unit_ministerial' }), { merge: true });
+    } else {
+      await setDoc(doc(db, 'question_additions', String(qIdNum)), Object.assign({}, payload, { category: 'lesson' }), { merge: true });
+    }
+
     invalidateSyncCache();
-    console.log(`[Firestore] New question added to Firestore with ID #${qIdNum}`);
+    console.log(`[Firestore] New question added to Firestore (${cat}) with ID #${qIdNum}`);
 
     res.json({
       success: true,
-      message: `تمت إضافة السؤال رقم ${qIdNum} إلى قاعدة بيانات Firebase السحابية بنجاح!`,
+      message: `تمت إضافة السؤال رقم ${qIdNum} إلى بنك الأسئلة بقاعدة بيانات Firebase السحابية بنجاح!`,
       data: payload
     });
   } catch (error) {
@@ -289,34 +367,41 @@ app.post('/api/questions/delete', async (req, res) => {
   }
 
   try {
-    const { questionId } = req.body;
+    const { questionId, category } = req.body;
     if (questionId === undefined) {
       return res.status(400).json({ success: false, error: 'رقم السؤال مطلوب' });
     }
 
     const qIdNum = Number(questionId);
-    const qDocRef = doc(db, 'question_deletions', String(qIdNum));
+    const cat = String(category || 'lesson').toLowerCase();
+    const isUnit = (cat === 'unit_ministerial' || cat === 'unit');
+    const deleteColl = isUnit ? 'unit_ministerial_deletions' : 'question_deletions';
+    const overrideColl = isUnit ? 'unit_ministerial_overrides' : 'question_overrides';
+    const additionColl = isUnit ? 'unit_ministerial_additions' : 'question_additions';
+
+    const qDocRef = doc(db, deleteColl, String(qIdNum));
     const payload = {
       questionId: qIdNum,
+      category: isUnit ? 'unit_ministerial' : 'lesson',
       deletedAt: new Date().toISOString()
     };
 
     await setDoc(qDocRef, payload, { merge: true });
 
-    // Remove any overrides or additions for this question
+    // Remove any overrides or additions for this question in this category
     try {
-      await deleteDoc(doc(db, 'question_overrides', String(qIdNum)));
-      await deleteDoc(doc(db, 'question_additions', String(qIdNum)));
+      await deleteDoc(doc(db, overrideColl, String(qIdNum)));
+      await deleteDoc(doc(db, additionColl, String(qIdNum)));
     } catch (e) {
       // Ignore if document didn't exist
     }
 
     invalidateSyncCache();
-    console.log(`[Firestore] Question #${qIdNum} marked as deleted in Firestore`);
+    console.log(`[Firestore] Question #${qIdNum} marked as deleted in ${deleteColl}`);
 
     res.json({
       success: true,
-      message: `تم تسجيل حذف السؤال رقم ${qIdNum} في قاعدة بيانات Firebase السحابية بنجاح!`,
+      message: `تم تسجيل حذف السؤال رقم ${qIdNum} من بنك (${isUnit ? 'اختبار حسب الوحدة والنماذج الوزارية' : 'اختبار حسب الدرس'}) في Firebase بنجاح!`,
       data: payload
     });
   } catch (error) {

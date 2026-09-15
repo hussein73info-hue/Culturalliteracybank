@@ -131,6 +131,18 @@
       "schema": "QuestionDeletion",
       "description": "Collection of deleted question IDs"
     },
+    "/unit_ministerial_overrides/{questionId}": {
+      "schema": "QuestionOverride",
+      "description": "Collection of question overrides for unit and ministerial exams"
+    },
+    "/unit_ministerial_additions/{questionId}": {
+      "schema": "QuestionAddition",
+      "description": "Collection of question additions for unit and ministerial exams"
+    },
+    "/unit_ministerial_deletions/{questionId}": {
+      "schema": "QuestionDeletion",
+      "description": "Collection of question deletions for unit and ministerial exams"
+    },
     "/student_registrations/{email}": {
       "schema": "StudentRegistration",
       "description": "Registered students database"

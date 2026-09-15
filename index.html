@@ -45,6 +45,9 @@
     <button id="btn-teacher-students" class="nb-students" onclick="openTeacherStudentsModal()" title="سجل الطلاب والنتائج" style="display:none">
       <i class="fas fa-users"></i> <span>سجل الطلاب</span>
     </button>
+    <button id="btn-bank-manager" class="nb-students" onclick="openBankManagerModal()" title="إدارة وفصل بنوك الأسئلة" style="display:none;background:linear-gradient(135deg,#0f766e,#0d9488);">
+      <i class="fas fa-database"></i> <span>بنوك الأسئلة</span>
+    </button>
     <button id="btn-editor" class="nb-editor" onclick="toggleEditorMode()" title="لوحة تحكم المعلم (تتطلب كلمة مرور)">
       <i class="fas fa-lock"></i> <span id="btn-editor-text">وضع المحرر</span>
     </button>
@@ -682,18 +685,42 @@
 <!-- TOAST CONTAINER -->
 <div id="toast-box" class="toast-box"></div>
 
-<script src="questions.js"></script>
-<script src="aqyem_data.js"></script>
-<script src="script.js"></script>
+<!-- نافذة إدارة وفصل بنوك الأسئلة (اختبار حسب الوحدة والوزاري vs اختبار حسب الدرس) -->
+<div id="bank-manager-overlay" class="editor-overlay" onclick="closeBankManagerModal(event)">
+  <div class="bank-mgr-modal">
+    <div class="editor-modal-head" style="background:linear-gradient(135deg,#0f766e,#0d9488);">
+      <div class="editor-modal-title">
+        <i class="fas fa-layer-group"></i> لوحة إدارة وفصل بنوك الأسئلة السحابية (Firebase)
+      </div>
+      <button type="button" class="editor-modal-close" onclick="closeBankManagerModal()" title="إغلاق">✕</button>
+    </div>
+    <div class="bank-mgr-body" id="bank-mgr-body">
+      <!-- يتم توليد محتوى البنوك ديناميكياً -->
+    </div>
+  </div>
+</div>
+
 <script>
-  // 1) تطبيق المحذوفات أولاً (لإزالة الأسئلة قبل معالجة الإضافات والتعديلات)
-  applyLocalDeletions();
-  // 2) تطبيق الأسئلة المُضافة محفوظة محلياً
-  applyLocalAdditions();
-  // 3) تطبيق أي تعديلات محفوظة محلياً قبل عرض الصفحة لسرعة العرض الفورية
-  applyLocalOverrides();
-  // 4) جلب ومزامنة أحدث التعديلات والأسئلة مباشرة من قاعدة بيانات Firebase Firestore السحابية
-  syncFromFirestore(true);
+  window.firestoreSyncInProgress = false;
+  var firestoreSyncInProgress = false;
+</script>
+<script src="questions.js?v=20260915_2"></script>
+<script src="aqyem_data.js?v=20260915_2"></script>
+<script src="script.js?v=20260915_2"></script>
+<script>
+  // تهيئة وتطبيق بنوك الأسئلة المفصولة (الوحدات/الوزاري vs الدروس)
+  if (typeof initializeQuestionBanks === 'function') {
+    initializeQuestionBanks();
+  } else {
+    if (typeof applyLocalDeletions === 'function') applyLocalDeletions();
+    if (typeof applyLocalAdditions === 'function') applyLocalAdditions();
+    if (typeof applyLocalOverrides === 'function') applyLocalOverrides();
+  }
+
+  // جلب ومزامنة أحدث التعديلات والأسئلة مباشرة من قاعدة بيانات Firebase Firestore السحابية لكلا البنكين
+  if (typeof syncFromFirestore === 'function') {
+    syncFromFirestore(true);
+  }
   if (typeof syncAqyemFromFirestore === 'function') {
     syncAqyemFromFirestore(true);
   }
