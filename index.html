@@ -12,7 +12,7 @@
   <meta property="og:description" content="منصة بنك أسئلة مادة الثقافة المالية للصف الثاني عشر المسار الأكاديمي مع دعم القيود المحاسبية متعددة الأسطر">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=20260915_4">
+  <link rel="stylesheet" href="style.css?v=20260916_rev6">
 </head>
 <body>
 <div class="app">
@@ -115,6 +115,11 @@
   <!-- PAGE: AQYEM QUESTIONS (صفحة عرض أسئلة أقيم تعلمي مع زر الرجوع) -->
   <div id="pg-aqyem-questions" class="pg" style="display:none">
     <div id="aqyem-questions-inner"></div>
+  </div>
+
+  <!-- PAGE: GLOSSARY (مسرد المصطلحات المعتمد للفصلين الأول والثاني) -->
+  <div id="pg-glossary" class="pg" style="display:none">
+    <div id="glossary-inner"></div>
   </div>
 
   <!-- PAGE: QUIZ -->
@@ -702,9 +707,11 @@
   }
   window.scrollToQModeCard = scrollToQModeCard;
 </script>
-<script src="questions.js?v=20260915_4"></script>
-<script src="aqyem_data.js?v=20260915_4"></script>
-<script src="script.js?v=20260915_4"></script>
+<script src="questions.js?v=20260916_rev8"></script>
+<script src="aqyem_data.js?v=20260916_rev8"></script>
+<script src="glossary_data.js?v=20260916_rev8"></script>
+<script src="glossary_ui.js?v=20260916_rev8"></script>
+<script src="script.js?v=20260916_rev8"></script>
 <script>
   // تهيئة وتطبيق بنوك الأسئلة المفصولة (الوحدات/الوزاري vs الدروس)
   if (typeof initializeQuestionBanks === 'function') {

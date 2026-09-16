@@ -241,6 +241,11 @@ header strong{color:#f5d061;}
     grid-template-columns:repeat(3,1fr);
   }
 }
+@media (min-width:900px){
+  .menu-grid-4{
+    grid-template-columns:repeat(4,1fr);
+  }
+}
 
 .menu-card{
   border-radius:16px;
@@ -282,6 +287,7 @@ header strong{color:#f5d061;}
 .card-book-sem1{background:linear-gradient(135deg,#0c4a6e,#0284c7);color:#fff;}
 .card-book-sem2{background:linear-gradient(135deg,#064e3b,#059669);color:#fff;}
 .card-aqyem{background:linear-gradient(135deg,#115e59,#0891b2);color:#fff;}
+.card-glossary{background:linear-gradient(135deg,#312e81,#4f46e5);color:#fff;}
 .card-aqyem-construction{
   background:linear-gradient(135deg,#1e293b,#334155);
   color:#f8fafc;
@@ -2318,17 +2324,17 @@ body.editor-on #btn-teacher-students {
 }
 .bkm-btn:active{transform:scale(.98);}
 .bkm-btn-dosieh{
-  background:linear-gradient(135deg,#0284c7,#0369a1);
+  background:linear-gradient(135deg,#475569,#334155);
   color:#ffffff;
-  box-shadow:0 3px 10px rgba(2,132,199,0.25);
+  box-shadow:0 3px 10px rgba(51,65,85,0.2);
 }
-.bkm-btn-dosieh:hover{background:linear-gradient(135deg,#0369a1,#075985);color:#fff;}
+.bkm-btn-dosieh:hover{background:linear-gradient(135deg,#334155,#1e293b);color:#fff;}
 .bkm-btn-read{
-  background:linear-gradient(135deg,#0284c7,#0369a1);
+  background:linear-gradient(135deg,#1d4ed8,#0284c7);
   color:#ffffff;
-  box-shadow:0 3px 10px rgba(2,132,199,0.25);
+  box-shadow:0 3px 12px rgba(29,78,216,0.28);
 }
-.bkm-btn-read:hover{background:linear-gradient(135deg,#0369a1,#075985);color:#fff;}
+.bkm-btn-read:hover{background:linear-gradient(135deg,#1e40af,#0369a1);color:#fff;}
 .bkm-btn-aqyem{
   background:linear-gradient(135deg,#0f766e,#0d9488);
   color:#ffffff;

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "build": "vite build && mkdir -p dist/books && cp -rf public/books/* dist/books/ 2>/dev/null || true && cp -f questions.js aqyem_data.js script.js style.css financial_culture_bank.doc financial_culture_bank.docx firebase-applet-config.json dist/ 2>/dev/null || true",
+    "build": "vite build && mkdir -p dist/books && cp -rf public/books/* dist/books/ 2>/dev/null || true && cp -f questions.js aqyem_data.js glossary_data.js glossary_ui.js script.js style.css financial_culture_bank.doc financial_culture_bank.docx firebase-applet-config.json dist/ 2>/dev/null || true",
     "start": "node server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist",

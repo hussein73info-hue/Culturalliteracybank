@@ -20,6 +20,7 @@ export const BOOKS_DATA = {
     icon: "fa-book-bookmark",
     pdfUrl: "/api/books/book_sem1/pdf",
     directPdf: "/api/books/book_sem1/download",
+    driveUrl: "https://drive.google.com/file/d/1Olfyv-DcLIM4Xj--lNgD4Hto5JMHWSPS/view?usp=drive_link",
     units: [
       {
         id: 1,
@@ -375,6 +376,7 @@ export const BOOKS_DATA = {
     icon: "fa-book-open-reader",
     pdfUrl: "/api/books/book_sem2/pdf",
     directPdf: "/api/books/book_sem2/download",
+    driveUrl: "https://drive.google.com/file/d/1R0nmk0GAQjZ8AYgYYV-kFmVx16iQm6uF/view?usp=sharing",
     units: [
       {
         id: 4,

@@ -41,6 +41,16 @@ const PORT = 3000;
 // Middleware for parsing JSON bodies
 app.use(express.json({ limit: '10mb' }));
 
+// Prevent browser caching of static scripts and markup during updates
+app.use((req, res, next) => {
+  if (req.path.endsWith('.js') || req.path.endsWith('.css') || req.path === '/' || req.path.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 // Initialize Firebase Firestore
 let db = null;
 let firebaseConfig = null;
@@ -577,26 +587,81 @@ app.get('/api/books/:id/pdf', (req, res) => {
   res.status(404).json({ success: false, error: 'ملف الـ PDF غير موجود' });
 });
 
-// Download PDF file as attachment directly to student's device
-app.get('/api/books/:id/download', (req, res) => {
+// Download PDF file: redirects directly to Google Drive link if set, otherwise serves local file
+app.get('/api/books/:id/download', async (req, res) => {
   const bookId = req.params.id;
-  const fileName = `${bookId}.pdf`;
-  const candidates = [
-    path.join(__dirname, 'public', 'books', fileName),
-    path.join(__dirname, 'dist', 'books', fileName),
-    path.join(__dirname, 'books', fileName)
-  ];
+  const fallback = BOOKS_DATA[bookId] || null;
+  let driveUrl = fallback && fallback.driveUrl ? fallback.driveUrl : null;
 
-  const foundPath = candidates.find(p => fs.existsSync(p));
-  if (foundPath) {
-    const arabicName = bookId === 'book_sem1'
-      ? 'كتاب_الثقافة_المالية_الفصل_الأول_التوجيهي.pdf'
-      : 'كتاب_الثقافة_المالية_الفصل_الثاني_التوجيهي.pdf';
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(arabicName)}"; filename*=UTF-8''${encodeURIComponent(arabicName)}`);
-    return res.sendFile(foundPath);
+  if (db) {
+    try {
+      const snap = await getDoc(doc(db, 'curriculum_books', bookId));
+      if (snap.exists() && snap.data().driveUrl) {
+        driveUrl = snap.data().driveUrl;
+      }
+    } catch (e) {
+      console.warn('Error reading book driveUrl from firestore:', e.message);
+    }
   }
-  res.status(404).json({ success: false, error: 'ملف الـ PDF غير موجود للتحميل' });
+
+  if (driveUrl && typeof driveUrl === 'string' && driveUrl.trim().length > 0) {
+    return res.redirect(driveUrl.trim());
+  }
+
+  // إذا لم يتم تحديد رابط Google Drive بعد، نوجه المستخدم لصفحة واضحة وتنبيه للتصفح
+  return res.status(200).send(`
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>تنزيل كتاب الثقافة المالية</title>
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800&display=swap" rel="stylesheet">
+      <style>
+        body { font-family: 'Tajawal', sans-serif; background: #f0f7ff; color: #1e293b; margin: 0; padding: 30px 16px; display: flex; align-items: center; justify-content: center; min-height: 80vh; }
+        .card { background: #fff; max-width: 520px; width: 100%; border-radius: 16px; padding: 32px 24px; box-shadow: 0 10px 25px rgba(2,132,199,0.1); border: 1.5px solid #bae6fd; text-align: center; }
+        h1 { font-size: 20px; color: #0284c7; margin-bottom: 12px; }
+        p { font-size: 15px; color: #475569; line-height: 1.7; margin-bottom: 16px; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #0284c7; color: #fff; text-decoration: none; font-weight: 700; padding: 12px 24px; border-radius: 10px; font-size: 15px; transition: background 0.2s; }
+        .btn:hover { background: #0369a1; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div style="font-size:42px;margin-bottom:12px;">📚</div>
+        <h1>تنزيل كتاب المنهاج المعتمد</h1>
+        <p>لتنزيل النسخة الوزارية المعتمدة الرسمية الكاملة بجودتها الفائقة (140 صفحة ملونة مع كافة الجداول والرسومات وبخط عربي سليم)، يرجى إضافة رابط Google Drive المباشر من لوحة المعلم.</p>
+        <p>بإمكان الطالب حالياً <strong>تصفح وقراءة كافة صفحات ودروس الكتاب التفاعلية</strong> مجاناً وبكل وضوح من داخل التطبيق عبر زر «تصفح الكتاب».</p>
+        <a href="/" class="btn">العودة لتصفح الكتاب في المنصة</a>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+// Update Google Drive download URL for a textbook
+app.post('/api/books/:id/set-drive-url', async (req, res) => {
+  const bookId = req.params.id;
+  const { driveUrl } = req.body || {};
+  if (!driveUrl || typeof driveUrl !== 'string') {
+    return res.status(400).json({ success: false, error: 'رابط Google Drive غير صالح' });
+  }
+
+  if (BOOKS_DATA[bookId]) {
+    BOOKS_DATA[bookId].driveUrl = driveUrl.trim();
+  }
+
+  if (db) {
+    try {
+      await setDoc(doc(db, 'curriculum_books', bookId), { driveUrl: driveUrl.trim(), updatedAt: new Date().toISOString() }, { merge: true });
+      booksCache = null;
+      return res.json({ success: true, message: 'تم تحديث رابط Google Drive بنجاح', driveUrl: driveUrl.trim() });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  res.json({ success: true, message: 'تم حفظ الرابط محلياً', driveUrl: driveUrl.trim() });
 });
 
 let booksCache = null;

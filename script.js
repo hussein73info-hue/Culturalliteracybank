@@ -3788,6 +3788,8 @@ function showPage(id) {
     renderAqyemSem2Page();
   } else if (id === 'aqyem-questions') {
     renderAqyemQuestionsPage();
+  } else if (id === 'glossary') {
+    if (typeof renderGlossaryPage === 'function') renderGlossaryPage();
   }
 
   var nb = document.getElementById('navbar');
@@ -3971,6 +3973,7 @@ function renderHome() {
       '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
         '<button onclick="openTeacherStudentsModal()" style="background:#fff;color:#1b4f72;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;font-family:\'Tajawal\',sans-serif;display:inline-flex;align-items:center;gap:6px;"><i class="fas fa-users"></i> سجل الطلاب والنتائج</button>' +
+        '<button onclick="openBookDriveUrlSettings()" style="background:#0284c7;color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;font-family:\'Tajawal\',sans-serif;display:inline-flex;align-items:center;gap:6px;" title="تعيين روابط Google Drive لتنزيل الكتب الأصلية"><i class="fab fa-google-drive"></i> رابط كتب Drive</button>' +
         '<button onclick="toggleEditorMode()" style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.4);border-radius:9px;padding:8px 12px;font-size:12px;cursor:pointer;font-family:\'Tajawal\',sans-serif;"><i class="fas fa-sign-out-alt"></i> خروج من وضع المحرر</button>' +
       '</div>' +
     '</div>'
@@ -3995,16 +3998,17 @@ function renderHome() {
       '</div>' +
     '</div>';
 
-  // القسم الثاني: المناهج المدرسية المقررة وحل أسئلة أقيم تعلمي (يأتي تحته)
+  // القسم الثاني: المناهج المدرسية المقررة وحل أسئلة أقيم تعلمي ومسرد المصطلحات
   var curriculumSectionHtml =
     '<div class="home-section" style="margin-top:20px;">' +
       '<div class="home-sec-title">' +
         '<i class="fas fa-graduation-cap" style="color:#0284c7;"></i> المنهاج المدرسي والكتب المقررة' +
       '</div>' +
-      '<div class="menu-grid menu-grid-3">' +
-        mCard('fa-book-bookmark', 'card-book-sem1', 'كتاب الفصل الأول', 'منهاج الثقافة المالية (الوحدات 1، 2، 3) • دوسية رقمية وتحميل وفهرس الدروس', "openBookModal(1)", 'كتاب الطالب') +
-        mCard('fa-book-open-reader', 'card-book-sem2', 'كتاب الفصل الثاني', 'منهاج الثقافة المالية (الوحدات 4، 5، 6، 7) • دوسية رقمية وتحميل وفهرس الدروس', "openBookModal(2)", 'كتاب الطالب') +
+      '<div class="menu-grid menu-grid-4">' +
+        mCard('fa-book-bookmark', 'card-book-sem1', 'كتاب الفصل الأول', 'كتاب الطالب المعتمد (الوحدات 1، 2، 3) • تنزيل مباشر PDF ودوسية وفهرس الدروس', "openBookModal(1)", 'كتاب الطالب') +
+        mCard('fa-book-open', 'card-book-sem2', 'كتاب الفصل الثاني', 'كتاب الطالب المعتمد (الوحدات 4، 5، 6، 7) • تنزيل مباشر PDF ودوسية وفهرس الدروس', "openBookModal(2)", 'كتاب الطالب') +
         mCard('fa-clipboard-check', 'card-aqyem', 'حل أسئلة «أُقيّم تعلّمي»', 'بنك إجابات وشروحات أسئلة أُقيّم تعلّمي المعتمدة • للفصلين الأول والثاني', "goTo('aqyem')", 'معتمد ✨') +
+        mCard('fa-spell-check', 'card-glossary', 'مسرد المصطلحات', 'المعجم والمفاهيم الرسمية المعتمدة في كتابي الطالب (119 مصطلحاً بالعربية والإنجليزية)', "goTo('glossary')", 'معتمد 📖') +
       '</div>' +
     '</div>';
 
@@ -4027,13 +4031,15 @@ function renderHome() {
   document.getElementById('home-inner').innerHTML = html;
 }
 
-function mCard(icon, cls, title, sub, onclick, badge) {
+function mCard(icon, cls, title, sub, onclick, badge, extraActionHtml) {
   var badgeHtml = badge ? ('<span class="mc-badge">' + badge + '</span>') : '';
+  var extraHtml = extraActionHtml ? ('<div class="mc-extra-action" style="margin-top:10px;">' + extraActionHtml + '</div>') : '';
   return '<div class="menu-card ' + cls + '" onclick="' + onclick + '">' +
     badgeHtml +
     '<div class="mc-icon"><i class="fas ' + icon + '"></i></div>' +
     '<div class="mc-title">' + title + '</div>' +
     '<div class="mc-sub">' + sub + '</div>' +
+    extraHtml +
   '</div>';
 }
 
@@ -4050,6 +4056,7 @@ function openBookModal(sem) {
     icon: 'fa-book-bookmark',
     pdfUrl: '/api/books/book_sem1/pdf',
     directPdf: '/api/books/book_sem1/download',
+    driveUrl: (cachedBooksData['book_sem1'] && cachedBooksData['book_sem1'].driveUrl) || 'https://drive.google.com/file/d/1Olfyv-DcLIM4Xj--lNgD4Hto5JMHWSPS/view?usp=drive_link',
     totalLessons: 14,
     totalUnits: 3,
     pagesInfo: '140 صفحة • الطبعة الثانية (مزيدة ومنقحة) 2026م (1446هـ/2025م)',
@@ -4100,6 +4107,7 @@ function openBookModal(sem) {
     icon: 'fa-book-open-reader',
     pdfUrl: '/api/books/book_sem2/pdf',
     directPdf: '/api/books/book_sem2/download',
+    driveUrl: (cachedBooksData['book_sem2'] && cachedBooksData['book_sem2'].driveUrl) || '',
     totalLessons: 14,
     totalUnits: 4,
     pagesInfo: '120 صفحة • الطبعة الثانية (مزيدة ومنقحة) 2026م (1447هـ/2025م)',
@@ -4212,16 +4220,23 @@ function openBookModal(sem) {
         '</div>' +
       '</div>' +
       '<div class="bkm-actions-row">' +
+        '<a href="' + (data.driveUrl || ('/api/books/book_sem' + sem + '/download')) + '" target="_blank" rel="noopener noreferrer" class="bkm-btn bkm-btn-download" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;padding:12px 16px;border-radius:12px;box-shadow:0 3px 10px rgba(2,132,199,0.25);" title="تنزيل النسخة الوزارية الرسمية المعتمدة الكاملة بصيغة PDF مباشرة من Google Drive">' +
+          '<i class="fab fa-google-drive" style="font-size:16px;"></i> <span>تنزيل كتاب الطالب (Drive PDF)</span>' +
+        '</a>' +
         '<button type="button" class="bkm-btn bkm-btn-dosieh" onclick="showDosiehUnderConstruction(' + sem + ');" title="دوسية الكتاب الرقمية (قيد الإعداد والتجهيز)">' +
           '<i class="fas fa-book-open"></i> <span>دوسية الكتاب الرقمية</span>' +
         '</button>' +
-        '<a href="/api/books/book_sem' + sem + '/download" download="كتاب_الثقافة_المالية_الفصل_' + (sem === 1 ? 'الأول' : 'الثاني') + '_التوجيهي.pdf" class="bkm-btn bkm-btn-download" style="background:#0284c7;color:#fff;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;padding:10px 16px;border-radius:10px;box-shadow:0 2px 6px rgba(2,132,199,0.25);" title="تنزيل وتحميل الكتاب بصيغة PDF مباشرة">' +
-          '<i class="fas fa-file-arrow-down"></i> <span>تنزيل الكتاب (PDF)</span>' +
-        '</a>' +
         '<button type="button" class="bkm-btn bkm-btn-aqyem" onclick="closeBookModal(); openAqyemFiltered(' + sem + ');" title="حل أسئلة أقيم تعلمي المعتمدة">' +
           '<i class="fas fa-clipboard-check"></i> <span>حل أسئلة «أُقيّم تعلّمي»</span>' +
         '</button>' +
       '</div>' +
+      (editorMode ? (
+        '<div style="margin-top:12px;text-align:center;">' +
+          '<button type="button" onclick="promptSetBookDriveUrl(' + sem + ');" style="background:#e0f2fe;color:#0369a1;border:1.5px dashed #0284c7;border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:\'Tajawal\',sans-serif;display:inline-flex;align-items:center;gap:6px;" title="تعديل أو إدخال رابط Google Drive المعتمد لتنزيل هذا الكتاب">' +
+            '<i class="fab fa-google-drive" style="color:#0284c7;"></i> تعيين رابط تنزيل Google Drive لهذا الكتاب' +
+          '</button>' +
+        '</div>'
+      ) : '') +
     '</div>' +
     '<div class="bkm-units-sec-title"><i class="fas fa-play-circle" style="color:var(--pr);"></i> بدء تدريب على دروس الفصل:</div>' +
     unitsHtml;
@@ -4416,7 +4431,20 @@ async function openDigitalReader(sem, targetPage) {
   if (directPdfBtn) {
     var pdfDownloadUrl = '/api/books/book_sem' + currentReaderSem + '/download';
     directPdfBtn.href = pdfDownloadUrl;
-    directPdfBtn.setAttribute('download', currentReaderSem === 1 ? 'كتاب_الثقافة_المالية_الفصل_الأول_التوجيهي.pdf' : 'كتاب_الثقافة_المالية_الفصل_الثاني_التوجيهي.pdf');
+    directPdfBtn.onclick = function(e) {
+      var curB = cachedBooksData['book_sem' + currentReaderSem];
+      var dUrl = (curB && curB.driveUrl) ? curB.driveUrl.trim() : '';
+      if (dUrl) {
+        window.open(dUrl, '_blank');
+        e.preventDefault();
+        return false;
+      }
+      if (editorMode) {
+        e.preventDefault();
+        promptSetBookDriveUrl(currentReaderSem);
+        return false;
+      }
+    };
   }
 
   var extViewBtn = document.getElementById('pdf-external-view-btn');
@@ -4819,6 +4847,39 @@ function readerSpeakCurrentPage() {
   });
 }
 window.readerSpeakCurrentPage = readerSpeakCurrentPage;
+
+function promptSetBookDriveUrl(sem) {
+  var semName = sem === 1 ? 'الفصل الأول' : 'الفصل الثاني';
+  var currentVal = (cachedBooksData && cachedBooksData['book_sem' + sem] && cachedBooksData['book_sem' + sem].driveUrl) ? cachedBooksData['book_sem' + sem].driveUrl : '';
+  var newUrl = window.prompt('أدخل رابط Google Drive المباشر لتنزيل كتاب ' + semName + ':\n(تأكد أن إعداد المشاركة في Google Drive هو: أي شخص لديه الرابط يمكنه العرض)', currentVal);
+  if (newUrl === null) return;
+  newUrl = newUrl.trim();
+  fetch('/api/books/book_sem' + sem + '/set-drive-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ driveUrl: newUrl })
+  }).then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.success) {
+        if (!cachedBooksData['book_sem' + sem]) cachedBooksData['book_sem' + sem] = {};
+        cachedBooksData['book_sem' + sem].driveUrl = newUrl;
+        toast('تم حفظ وتحديث رابط Google Drive بنجاح!', 'ok');
+      } else {
+        toast('حدث خطأ أثناء حفظ الرابط: ' + (data.error || 'فشلت العملية'), 'err');
+      }
+    }).catch(function(err) {
+      toast('تعذر الاتصال بالخادم لحفظ الرابط', 'err');
+    });
+}
+window.promptSetBookDriveUrl = promptSetBookDriveUrl;
+
+function openBookDriveUrlSettings() {
+  var choice = window.prompt('اختر رقم الفصل لتعيين رابط Google Drive الخاص به:\n1 - كتاب الفصل الأول\n2 - كتاب الفصل الثاني', '1');
+  if (choice === '1' || choice === '2') {
+    promptSetBookDriveUrl(parseInt(choice, 10));
+  }
+}
+window.openBookDriveUrlSettings = openBookDriveUrlSettings;
 
 function showDosiehUnderConstruction(sem) {
   var semTitle = sem === 2 ? 'الفصل الدراسي الثاني' : 'الفصل الدراسي الأول';
