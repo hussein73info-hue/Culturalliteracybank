@@ -12,7 +12,7 @@
   <meta property="og:description" content="منصة بنك أسئلة مادة الثقافة المالية للصف الثاني عشر المسار الأكاديمي مع دعم القيود المحاسبية متعددة الأسطر">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20260915_4">
 </head>
 <body>
 <div class="app">
@@ -244,25 +244,17 @@
       <button type="button" class="editor-modal-close" onclick="closeQuizModeModal()"><i class="fas fa-times"></i></button>
     </div>
     
-    <div class="editor-modal-body" style="padding:20px 18px;">
+    <div id="quiz-mode-modal-body" class="editor-modal-body">
       <!-- Quiz Meta Info -->
-      <div id="qmode-quiz-info-bar" style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div style="width:42px;height:42px;border-radius:10px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
-            <i class="fas fa-file-signature"></i>
-          </div>
-          <div>
-            <div id="qmode-quiz-title" style="font-weight:800;color:#0f172a;font-size:15px;line-height:1.4;">عنوان الاختبار</div>
-            <div id="qmode-quiz-count" style="font-size:12.5px;color:#64748b;margin-top:2px;">عدد الأسئلة: -- سؤالاً</div>
-          </div>
+      <div id="qmode-quiz-info-bar" class="qmode-info-bar">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-file-signature" style="color:#0284c7;font-size:16px;"></i>
+          <span id="qmode-quiz-title" style="font-weight:800;color:#0f172a;font-size:13.5px;">عنوان الاختبار</span>
+          <span id="qmode-quiz-count" style="font-size:11.5px;color:#64748b;">(عدد الأسئلة: --)</span>
         </div>
-        <div style="font-size:12px;color:#0369a1;background:#e0f2fe;padding:5px 12px;border-radius:20px;font-weight:700;">
-          <i class="fas fa-hand-pointer"></i> حدد النمط للبدء فوراً
+        <div class="qmode-info-tag">
+          <i class="fas fa-hand-pointer"></i> حدد النمط للبدء
         </div>
-      </div>
-
-      <div style="font-size:13.5px;color:#334155;margin-bottom:14px;font-weight:700;">
-        حدد نمط التدريب أو الامتحان المناسب لك قبل بدء الجلسة:
       </div>
 
       <!-- Mode Cards Grid -->
@@ -282,24 +274,16 @@
           <div class="qmc-features">
             <div class="qmc-feature-item">
               <i class="fas fa-check-circle" style="color:#10b981;"></i>
-              <span><strong>تصحيح فوري ومباشر:</strong> تظهر لك صحة كل إجابة فور اختيارها (أخضر / أحمر).</span>
+              <span><strong>تصحيح فوري ومباشر:</strong> إظهار صحة الإجابة فور اختيارها.</span>
             </div>
             <div class="qmc-feature-item">
               <i class="fas fa-book-open" style="color:#0284c7;"></i>
-              <span><strong>شروحات وسند الكتاب:</strong> عرض الشرح التفسيري والسند العلمي ورقم الصفحة من كتاب الطالب.</span>
-            </div>
-            <div class="qmc-feature-item">
-              <i class="fas fa-lightbulb" style="color:#f59e0b;"></i>
-              <span><strong>تلميحات مساعدة:</strong> إمكانية فتح تلميح السؤال الذكي للمساعدة في الاستذكار.</span>
-            </div>
-            <div class="qmc-feature-item">
-              <i class="fas fa-hourglass-half" style="color:#6366f1;"></i>
-              <span><strong>بدون ضغط وقت:</strong> تدرب براحتك وتأنّ في التفكير دون وجود مؤقت تنازلي.</span>
+              <span><strong>شروحات وسند الكتاب:</strong> الشرح وسند كتاب الطالب والصفحة.</span>
             </div>
           </div>
 
           <button type="button" class="qmc-start-btn btn-start-train">
-            <i class="fas fa-play"></i> <span>ابدأ بالنمط التدريبي</span>
+            <i class="fas fa-play"></i> <span>ابدأ التدريب</span>
           </button>
         </div>
 
@@ -310,32 +294,24 @@
               <i class="fas fa-stopwatch"></i>
             </div>
             <div class="qmc-title-box">
-              <span class="qmc-badge badge-exam"><i class="fas fa-award"></i> محاكاة الامتحان الوزاري</span>
+              <span class="qmc-badge badge-exam"><i class="fas fa-award"></i> امتحان وزاري</span>
               <h4 class="qmc-title">النمط الامتحاني</h4>
             </div>
           </div>
           
           <div class="qmc-features">
             <div class="qmc-feature-item">
-              <i class="fas fa-shield-halved" style="color:#dc2626;"></i>
-              <span><strong>محاكاة قاعة التوجيهي:</strong> تجربة اختبار حقيقية لتقييم مستواك الفعلي بدقة.</span>
-            </div>
-            <div class="qmc-feature-item">
               <i class="fas fa-clock" style="color:#ea580c;"></i>
-              <span><strong>مؤقت زمني دقيق:</strong> احتساب الوقت التنازلي لإدارة زمن الإجابة والسرعة.</span>
+              <span><strong>مؤقت زمني دقيق:</strong> احتساب تنازلي لإدارة سرعة الحل.</span>
             </div>
             <div class="qmc-feature-item">
               <i class="fas fa-eye-slash" style="color:#64748b;"></i>
-              <span><strong>حجب الإجابات أثناء الحل:</strong> لا تظهر الإجابات الصحيحة والتفسيرات إلا بعد تسليم ورقة الامتحان.</span>
-            </div>
-            <div class="qmc-feature-item">
-              <i class="fas fa-chart-line" style="color:#8b5cf6;"></i>
-              <span><strong>بطاقة نتيجة وتقرير تفصيلي:</strong> تقرير شامل بالعلامة والنسبة المئوية وتوثيق المستوى.</span>
+              <span><strong>حجب الإجابات أثناء الحل:</strong> تظهر النتائج بعد تسليم الامتحان.</span>
             </div>
           </div>
 
           <button type="button" class="qmc-start-btn btn-start-exam">
-            <i class="fas fa-pen-alt"></i> <span>ابدأ بالنمط الامتحاني</span>
+            <i class="fas fa-pen-alt"></i> <span>ابدأ الامتحان</span>
           </button>
         </div>
       </div>
@@ -703,10 +679,32 @@
 <script>
   window.firestoreSyncInProgress = false;
   var firestoreSyncInProgress = false;
+
+  // وظيفة التمرير السلس بين أنماط الاختبار (التدريبي / الامتحاني)
+  function scrollToQModeCard(mode) {
+    var card = document.querySelector('.quiz-mode-card.qmc-' + mode);
+    var body = document.getElementById('quiz-mode-modal-body') || document.querySelector('.quiz-mode-modal .editor-modal-body');
+    if (card && body) {
+      var topPos = card.offsetTop - body.offsetTop - 10;
+      body.scrollTo({ top: Math.max(0, topPos), behavior: 'smooth' });
+    }
+    var btnTrain = document.getElementById('btn-tab-train');
+    var btnExam = document.getElementById('btn-tab-exam');
+    if (btnTrain && btnExam) {
+      if (mode === 'train') {
+        btnTrain.classList.add('active');
+        btnExam.classList.remove('active');
+      } else {
+        btnExam.classList.add('active');
+        btnTrain.classList.remove('active');
+      }
+    }
+  }
+  window.scrollToQModeCard = scrollToQModeCard;
 </script>
-<script src="questions.js?v=20260915_2"></script>
-<script src="aqyem_data.js?v=20260915_2"></script>
-<script src="script.js?v=20260915_2"></script>
+<script src="questions.js?v=20260915_4"></script>
+<script src="aqyem_data.js?v=20260915_4"></script>
+<script src="script.js?v=20260915_4"></script>
 <script>
   // تهيئة وتطبيق بنوك الأسئلة المفصولة (الوحدات/الوزاري vs الدروس)
   if (typeof initializeQuestionBanks === 'function') {

@@ -7845,9 +7845,63 @@ window.startQuizSession = startQuizSession;
 
 function openQuizModeModal() {
   var overlay = document.getElementById('quiz-mode-select-overlay');
-  if (overlay) overlay.classList.add('open');
+  if (overlay) {
+    overlay.classList.add('open');
+    var body = document.getElementById('quiz-mode-modal-body') || overlay.querySelector('.editor-modal-body');
+    if (body) {
+      body.scrollTop = 0;
+      initQuizModeScrollSync();
+    }
+    var btnTrain = document.getElementById('btn-tab-train');
+    var btnExam = document.getElementById('btn-tab-exam');
+    if (btnTrain && btnExam) {
+      btnTrain.classList.add('active');
+      btnExam.classList.remove('active');
+    }
+  }
 }
 window.openQuizModeModal = openQuizModeModal;
+
+function scrollToQModeCard(mode) {
+  var card = document.querySelector('.quiz-mode-card.qmc-' + mode);
+  var body = document.getElementById('quiz-mode-modal-body') || document.querySelector('.quiz-mode-modal .editor-modal-body');
+  if (card && body) {
+    var topPos = card.offsetTop - body.offsetTop - 10;
+    body.scrollTo({ top: Math.max(0, topPos), behavior: 'smooth' });
+  }
+  var btnTrain = document.getElementById('btn-tab-train');
+  var btnExam = document.getElementById('btn-tab-exam');
+  if (btnTrain && btnExam) {
+    if (mode === 'train') {
+      btnTrain.classList.add('active');
+      btnExam.classList.remove('active');
+    } else {
+      btnExam.classList.add('active');
+      btnTrain.classList.remove('active');
+    }
+  }
+}
+window.scrollToQModeCard = scrollToQModeCard;
+
+function initQuizModeScrollSync() {
+  var body = document.getElementById('quiz-mode-modal-body');
+  if (!body || body._scrollSyncInitialized) return;
+  body._scrollSyncInitialized = true;
+  body.addEventListener('scroll', function() {
+    var examCard = document.querySelector('.quiz-mode-card.qmc-exam');
+    var btnTrain = document.getElementById('btn-tab-train');
+    var btnExam = document.getElementById('btn-tab-exam');
+    if (!examCard || !btnTrain || !btnExam) return;
+    var examTop = examCard.offsetTop - body.offsetTop;
+    if (body.scrollTop >= examTop - 80) {
+      btnExam.classList.add('active');
+      btnTrain.classList.remove('active');
+    } else {
+      btnTrain.classList.add('active');
+      btnExam.classList.remove('active');
+    }
+  }, { passive: true });
+}
 
 function closeQuizModeModal(e) {
   if (e && e.target && e.target.id !== 'quiz-mode-select-overlay' && !e.target.closest('.editor-modal-close')) {

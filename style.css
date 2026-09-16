@@ -4916,35 +4916,103 @@ body.editor-on .aqyem-top-add-btn{
 /* ══════════════════════════════════════════════
    QUIZ MODE SELECTOR MODAL (النمط التدريبي أو النمط الامتحاني)
    ══════════════════════════════════════════════ */
+#quiz-mode-select-overlay {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
 .quiz-mode-modal {
-  border-radius: 16px;
-  overflow: hidden;
+  border-radius: 14px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.22);
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 90vh !important;
+  max-height: 90dvh !important;
+  overflow: hidden !important;
+  width: 95%;
+  max-width: 580px;
+}
+
+.quiz-mode-modal .editor-modal-head {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 11px 14px !important;
+}
+
+.quiz-mode-modal .editor-modal-body,
+#quiz-mode-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+  padding: 12px 14px 16px !important;
+}
+
+.quiz-mode-modal .editor-modal-body::-webkit-scrollbar,
+#quiz-mode-modal-body::-webkit-scrollbar {
+  width: 5px;
+}
+.quiz-mode-modal .editor-modal-body::-webkit-scrollbar-track,
+#quiz-mode-modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.quiz-mode-modal .editor-modal-body::-webkit-scrollbar-thumb,
+#quiz-mode-modal-body::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+/* Info Bar Inside Quiz Mode Modal */
+.qmode-info-bar {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.qmode-info-tag {
+  font-size: 11px;
+  color: #0369a1;
+  background: #e0f2fe;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .quiz-mode-cards-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 680px) {
-  .quiz-mode-cards-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
+  gap: 10px;
 }
 
 .quiz-mode-card {
   background: #ffffff;
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 12px 10px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   cursor: pointer;
-  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   border: 2px solid #e2e8f0;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .quiz-mode-card.qmc-train {
@@ -4953,8 +5021,8 @@ body.editor-on .aqyem-top-add-btn{
 }
 .quiz-mode-card.qmc-train:hover {
   border-color: #059669;
-  transform: translateY(-3px);
-  box-shadow: 0 8px 22px rgba(5, 150, 105, 0.16);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(5, 150, 105, 0.15);
 }
 
 .quiz-mode-card.qmc-exam {
@@ -4963,32 +5031,32 @@ body.editor-on .aqyem-top-add-btn{
 }
 .quiz-mode-card.qmc-exam:hover {
   border-color: #d97706;
-  transform: translateY(-3px);
-  box-shadow: 0 8px 22px rgba(217, 119, 6, 0.16);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(217, 119, 6, 0.15);
 }
 
 .qmc-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .qmc-icon-wrap {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: 17px;
   flex-shrink: 0;
   transition: transform 0.2s ease;
 }
 .quiz-mode-card:hover .qmc-icon-wrap {
-  transform: scale(1.08);
+  transform: scale(1.06);
 }
 
 .train-icon {
@@ -5002,16 +5070,18 @@ body.editor-on .aqyem-top-add-btn{
 
 .qmc-title-box {
   flex: 1;
+  min-width: 0;
 }
 .qmc-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 4px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 20px;
-  margin-bottom: 4px;
+  padding: 2px 7px;
+  border-radius: 12px;
+  margin-bottom: 2px;
+  white-space: nowrap;
 }
 .badge-train {
   background: #dcfce7;
@@ -5023,10 +5093,11 @@ body.editor-on .aqyem-top-add-btn{
 }
 
 .qmc-title {
-  font-size: 17px;
+  font-size: 14.5px;
   font-weight: 800;
   margin: 0;
   color: #0f172a;
+  line-height: 1.25;
 }
 .qmc-train .qmc-title {
   color: #065f46;
@@ -5038,21 +5109,22 @@ body.editor-on .aqyem-top-add-btn{
 .qmc-features {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  margin-bottom: 18px;
-  font-size: 12.5px;
-  line-height: 1.55;
+  gap: 6px;
+  margin-bottom: 11px;
+  font-size: 11.5px;
+  line-height: 1.35;
   color: #334155;
+  flex: 1;
 }
 
 .qmc-feature-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
 }
 .qmc-feature-item i {
-  font-size: 14px;
-  margin-top: 3px;
+  font-size: 12px;
+  margin-top: 2px;
   flex-shrink: 0;
 }
 .qmc-feature-item span {
@@ -5061,38 +5133,108 @@ body.editor-on .aqyem-top-add-btn{
 
 .qmc-start-btn {
   width: 100%;
-  padding: 11px 16px;
-  border-radius: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
   font-family: 'Tajawal', sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   transition: all 0.18s ease;
-  min-height: 44px;
+  min-height: 38px;
 }
 .btn-start-train {
   background: linear-gradient(135deg, #059669, #10b981);
   color: #ffffff;
-  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.22);
 }
 .btn-start-train:hover {
   background: linear-gradient(135deg, #047857, #059669);
-  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);
+  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.3);
 }
 
 .btn-start-exam {
   background: linear-gradient(135deg, #1a3a5c, #2b4c7e);
   color: #ffffff;
-  box-shadow: 0 3px 10px rgba(26, 58, 92, 0.25);
+  box-shadow: 0 2px 8px rgba(26, 58, 92, 0.22);
 }
 .btn-start-exam:hover {
   background: linear-gradient(135deg, #142842, #1a3a5c);
-  box-shadow: 0 4px 14px rgba(26, 58, 92, 0.35);
+  box-shadow: 0 3px 10px rgba(26, 58, 92, 0.3);
+}
+
+@media (max-width: 680px) {
+  #quiz-mode-select-overlay {
+    padding: 6px !important;
+    align-items: center !important;
+  }
+  .quiz-mode-modal {
+    margin: auto 0 !important;
+    width: 100% !important;
+    max-width: 480px !important;
+    max-height: calc(100dvh - 12px) !important;
+    border-radius: 12px !important;
+  }
+  .quiz-mode-modal .editor-modal-head {
+    padding: 9px 12px !important;
+  }
+  .quiz-mode-modal .editor-modal-body,
+  #quiz-mode-modal-body {
+    padding: 8px 8px 10px !important;
+  }
+  .qmode-info-bar {
+    padding: 5px 8px !important;
+    margin-bottom: 7px !important;
+  }
+  .quiz-mode-cards-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+  .quiz-mode-card {
+    padding: 9px 7px !important;
+    border-radius: 10px !important;
+  }
+  .qmc-header {
+    gap: 6px !important;
+    margin-bottom: 6px !important;
+    padding-bottom: 6px !important;
+  }
+  .qmc-icon-wrap {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 14px !important;
+    border-radius: 7px !important;
+  }
+  .qmc-title {
+    font-size: 13px !important;
+  }
+  .qmc-badge {
+    font-size: 9px !important;
+    padding: 1px 5px !important;
+  }
+  .qmc-features {
+    gap: 5px !important;
+    margin-bottom: 8px !important;
+    font-size: 10.5px !important;
+    line-height: 1.3 !important;
+  }
+  .qmc-feature-item {
+    gap: 5px !important;
+  }
+  .qmc-feature-item i {
+    font-size: 11px !important;
+  }
+  .qmc-start-btn {
+    padding: 7px 6px !important;
+    font-size: 11.5px !important;
+    min-height: 34px !important;
+    border-radius: 7px !important;
+    gap: 5px !important;
+  }
 }
 
 /* ══════════════════════════════════════════════
